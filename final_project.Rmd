@@ -5,6 +5,17 @@ date: "2024-01-17"
 ---
 
 ```{r}
+library(mgcv)        # GAMs
+library(rsample)     # data splitting 
+library(dplyr)       # data wrangling
+library(rpart)       # performing regression trees
+library(rpart.plot)  # plotting regression trees
+library(ipred)       # bagging
+library(caret)       # bagging
+```
+
+
+```{r}
 df <- read.csv("phones_data.csv", header=T)
 
 summary(df)
@@ -58,11 +69,60 @@ pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
 
 ```{r}
 # Lowest and highest price are missing together
+
 # or drop them
 # or impute by mean
+# or impute by median
 # or impute by regression
+
 df[which(is.na(df$lowest_price)), ]
 ```
+
+# drop them
+
+```{r}
+drop_df <- df[-which(is.na(df$lowest_price)), ]
+
+
+df_split_drop <- initial_split(drop_df, prop = .7)
+df_train_drop <- training(df_split_drop)
+df_test_drop  <- testing(df_split_drop)
+
+drop_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_train_drop)
+summary(drop_fit)
+```
+
+# impute by mean
+
+```{r}
+mean_df <- df
+mean_df[which(is.na(df$lowest_price)), 6] <- mean(df[-which(is.na(df$lowest_price)), 6])
+
+
+df_split_mean <- initial_split(mean_df, prop = .7)
+df_train_mean <- training(df_split_mean)
+df_test_mean  <- testing(df_split_mean)
+
+mean_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_train_mean)
+summary(mean_fit)
+```
+
+# impute by median
+
+```{r}
+median_df <- df
+median_df[which(is.na(df$lowest_price)), 6] <- median(df[-which(is.na(df$lowest_price)), 6])
+
+
+df_split_median <- initial_split(median_df, prop = .7)
+df_train_median <- training(df_split_median)
+df_test_median <- testing(df_split_median)
+
+median_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_split_median)
+summary(median_fit)
+```
+
+# impute by regression
 
 ```{r}
 test <- df[which(is.na(df$lowest_price)), ]
@@ -70,7 +130,7 @@ train <- df[-which(is.na(df$lowest_price)), ]
 
 # Impute missing values
 fit <- lm(lowest_price ~ popularity + screen_size + battery_size + memory_size, data=train)
-prova <- predict(fit, test)
+imputed <- predict(fit, test)
 summary(fit)
 ```
 
@@ -78,12 +138,81 @@ summary(fit)
 summary(df$lowest_price)
 ```
 
+```{r}
+regression_df <- df
+regression_df$lowest_price[which(is.na(df$lowest_price))] <- imputed
+summary(regression_df$lowest_price)
+```
+```{r}
+
+df_split_regression <- initial_split(regression_df, prop = .7)
+df_train_regression <- training(df_split_regression)
+df_test_regression <- testing(df_split_regression)
+
+imputed_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_train_regression)
+summary(imputed_fit)
+```
+
+# Comparison
 
 ```{r}
-prova_df <- df
-prova_df$lowest_price[which(is.na(df$lowest_price))] <- prova
-summary(prova_df$lowest_price)
+AIC(drop_fit, mean_fit, median_fit, imputed_fit)
 ```
+
+```{r}
+R2 <- c(summary(drop_fit)$adj.r.squared, summary(mean_fit)$adj.r.squared, summary(median_fit)$adj.r.squared, summary(imputed_fit)$adj.r.squared)
+names(R2) <- c("drop", "mean", "median", "imputed")
+
+as.data.frame(R2)
+```
+
+```{r}
+RMSE_fun <- function(model, test) {
+  idxs.na <- apply(is.na(test), 1, any)
+  names(idxs.na) <- NULL
+  test.drop <- test[!idxs.na, ]
+  pred <- predict(model, test.drop)
+  sqrt(mean((test$best_price - pred)^2))
+}
+```
+
+
+```{r}
+
+RMSE <- c(RMSE_fun(drop_fit, df_test_drop), RMSE_fun(mean_fit, df_test_mean), RMSE_fun(median_fit, df_test_median), RMSE_fun(imputed_fit, df_test_regression))
+names(RMSE) <- c("drop", "mean", "median", "imputed")
+
+as.data.frame(RMSE)
+```
+
+
+
+```{r}
+df_split <- initial_split(drop_df, prop = .7)
+df_train <- training(df_split)
+df_test  <- testing(df_split)
+
+clf <- gam(best_price ~ popularity + s(screen_size) + s(battery_size) + s(memory_size) + s(lowest_price) + os, data=drop_df)
+summary(clf)
+```
+
+```{r}
+set.seed(123)
+df_split <- initial_split(drop_df, prop = .7)
+df_train <- training(df_split)
+df_test  <- testing(df_split)
+```
+
+```{r}
+tree <- rpart(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price + os, data=df_train)
+rpart.plot(tree)
+```
+
+```{r}
+tree_pred <- predict(tree, df_test)
+sqrt(sum((df_test$best_price - tree_pred)^2))
+```
+
 
 
 

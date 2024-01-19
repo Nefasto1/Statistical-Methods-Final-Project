@@ -1,0 +1,100 @@
+---
+title: "Final Project"
+output: html_document
+date: "2024-01-17"
+---
+
+```{r}
+df <- read.csv("phones_data.csv", header=T)
+
+summary(df)
+```
+
+```{r}
+head(df)
+```
+
+
+```{r warning=FALSE}
+# Categorical
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+# To numeric
+df$popularity <- as.numeric(df$popularity)
+
+# To euro
+df$best_price <- df$best_price*0.024
+df$lowest_price <- df$lowest_price*0.024
+df$highest_price <- df$highest_price*0.024
+```
+
+```{r warning=FALSE}
+summary(df)
+```
+
+We can notice that there is an outlier in the sellers amount. 
+
+```{r fig.height=20, fig.width=20}
+pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
+```
+
+Identify the outlier, here we can see that the row has odd values, for example the best price was 28€ and the lowest price was higher than the highest price. Therefore the screen size is 75 inches.
+
+```{r}
+df[which.max(df$screen_size), ]
+```
+
+We decided to remove the outlier.
+
+```{r}
+df <- df[-which.max(df$screen_size), ]
+```
+
+We can notice that now that the outlier is removed the plots are more readable.
+
+```{r fig.height=20, fig.width=20}
+pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
+```
+
+```{r}
+# Lowest and highest price are missing together
+# or drop them
+# or impute by mean
+# or impute by regression
+df[which(is.na(df$lowest_price)), ]
+```
+
+```{r}
+test <- df[which(is.na(df$lowest_price)), ]
+train <- df[-which(is.na(df$lowest_price)), ]
+
+# Impute missing values
+fit <- lm(lowest_price ~ popularity + screen_size + battery_size + memory_size, data=train)
+prova <- predict(fit, test)
+summary(fit)
+```
+
+```{r}
+summary(df$lowest_price)
+```
+
+
+```{r}
+prova_df <- df
+prova_df$lowest_price[which(is.na(df$lowest_price))] <- prova
+summary(prova_df$lowest_price)
+```
+
+
+
+```{r}
+for (i in 6:ncol(df)-1) {
+  hist(df[, i], main=names(df)[i], xlab=names(df)[i])
+}
+```
+
+```{r}
+for (i in 6:ncol(df)-1) {
+  hist(log(df[, i]), main=names(df)[i], xlab=names(df)[i])
+}
+```

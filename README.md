@@ -9,3 +9,6 @@
  - Selection of pred variables (for best_price) (check on R^2 and see if it is worth it to keep all variables)
  - Work with some models (lin reg, poisson etc...) and analysis (resid etc...)
  - Try some glms for pred
+
+
+Paper relativo a sto dataset: https://medikom.iocspublisher.org/index.php/JTI/article/view/98/32

@@ -1,6 +1,6 @@
 ## Statistical methods project
 
- - Type of file: __slides__
+ - Type of file: __slides__ and __report__
 
 ### Structure
  - Explain every variable

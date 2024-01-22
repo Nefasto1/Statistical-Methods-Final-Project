@@ -1,0 +1,44 @@
+github commands:
+
+	- clone -> bring repo online to local machine e.g git clone "ssh link or https link"
+	- add -> track the changes you made. e.g. git add . (adds all changes), git add "nome_file/folder" adds only the specific one. Also allows for git add -am "message" to add and commit at the same time, but ONLY WORKS for modified files (files that have already been commited before?)
+	- commit -> save the files on Git. There needs to be a message, ideally on the what and why  the commit is done. e.g git commit -m "message" -m "message". First message is title, second the description
+	- push -> upload the files you added and commited on remote repo (GitHub). E.g. git push origin master (Note, origin refers to the place where the repo is saved, master is the branch [check below for info]) To set an upstream (so default for origin and branch) we need to write 
+git push -u origin master (origin master can be changed to be something else). This is also what's done on a branch diff than main to create a pull request
+	- pull -> downlaod changes from the remote repo (GitHub) to your local machine
+	- status -> check for changes (mod/new files) present on the local machine but not in the 			git version, those changes need to be added and then commited to be saved.
+	- remote -> "somewhere else but not on this machine", e.g. git remote add origin "link"
+				git remove -v checks for all remote repos that are connected.
+	- checkout -> swap between branches or create new one, e.g. git checkout -b feature creates a new branch called feature.
+	- branch -> return the branches, * shows on which branch you're on, git branch -d name of branch deletes that branch
+	- diff -> shows the changes that have been made between two version of the code e.g.
+git diff feature (hit q to exit)
+	- reset -> unstage a file, e.g. git reset or git reset nameoffile. Can also be used to undo commits. So git keeps tracks of the commits using a stack with a pointer to its HEAD, we can use git reset HEAD~1 to reset to the commit in position HEAD - 1, so the position immediatly before the HEAD (the last commit). Can use git reset --hard to fully delete what was commited (usually we delete the changes from git but theys tay on our editor)
+	- log -> check the logs
+README
+	
+what the proejct does and relevant info
+
+how do we know if we in a repo? check for git folder (ls -la on terminal in repo folder)
+
+BRANCHING
+
+What is branching? By default the main branch is called "master" or "main", when we add branches
+we copy the code up until that point and any changes we do on the branch will not be reflected 
+on the main. Each individual branch cannot know what happens outside its "branch". This is good, 
+in the main branch we only want things that work, things that might break the code or are still WIP should be put in branches! One very common thing is that we notice a bug in the coe, we  make a hotfix branch, fix it and remerge it!.
+
+
+PULL REQUEST
+
+What are pull request? Basically we ask for our branch to be pulled into another, e.g. feature into main! Once a pr is made evryone can check our code, comment it ask for changes etc.. You can still modify it (same old add commit push) until it is merged to the main. Once it is merged usually you delete the branch.
+
+MERGE CONFLICTS
+
+We do our code, people do other code, master get's updated from diff places, multiple people save diff files. What do we keep? Has to be done manually via editor
+
+UNDOING
+What if we didn't want to stage an add? git reset for add and git reset HEAD~1 for last commit (1 can be changed to the number of commits we want to reset), we can check the commits via git log. Now via logthere are some ash (#) such as commit 62645dd52008342ea28ff311c3fb83da4fdb74e8 (origin/quick-test, quick-test) the series of nums and letters is an ash, we can also specify that to go back to that commit. Doing that leaves the changes in the editor but they're no longer prepped for git. To also remove such changes we need to use git reset --hard #
+
+FORKING
+Can be used to "copy" a repo in our user and do whatever we want to it. Basically we use it when we want to modify something and get our changes back in the main project. 

@@ -1,3 +1,6 @@
+# Abstract
+# Introduction
+ - Write what this report is about & objective
 # Preprocessing & Data analysis
  - Spiegare cos'è ogni variabile
  - Rimuovere la colonna index

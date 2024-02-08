@@ -4,9 +4,8 @@ author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
 date: "`r Sys.Date()`"
 output: html_document
 ---
-# Imports
+# Initial setup
 ```{r}
-
 #install.packages("mgcv")
 #install.packages("dplyr")
 #install.packages("rpart")
@@ -15,7 +14,10 @@ output: html_document
 #install.packages("caret")
 #install.packages("stringr")
 #install.packages("ggcorrplot")
+```
 
+## Import libraries
+```{r}
 library(stringr)
 library(mgcv)        # GAMs
 library(rsample)     # data splitting
@@ -25,26 +27,59 @@ library(rpart.plot)  # plotting regression trees
 library(ipred)       # bagging
 library(caret)
 library(ggcorrplot)
-
 ```
-# Data Analysis
-```{r}
 
+## Import dataset
+```{r}
 df <- read.csv("phones_data.csv", header=T)
 
-head(df)
-
-```
-```{r}
 summary(df)
 ```
+
+## Variable cleaning
+
+### Remove useless variables
 TODO: elenco variabili categoriali e spiegazioni sul dataset
 ```{r}
 # rimozione colonna degli indici
 df$X <- NULL
 ```
-# Dataset cleaning 
 
+### Factorize the categorical variables
+```{r}
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+```
+
+ 
+Let's divide the popularity into levels,assigning three levels associated with a numeric score.
+- From 0 to 400 -> low
+- From 401 to 800 -> medium
+- From 801 to 1224 -> high
+```{r}
+df$popularity <- as.numeric(df$popularity)
+
+tag <- c(0,400, 800, Inf)
+
+df$popularity_levels <- cut(df$popularity, breaks = tag,
+labels=c("low", "medium", "high"), include.lowest=TRUE)
+```
+
+### Convert the prices to euros
+```{r}
+
+df$best_price <- df$best_price*0.024
+df$lowest_price <- df$lowest_price*0.024
+df$highest_price <- df$highest_price*0.024
+```
+
+### Split the timestamps
+```{r}
+df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
+df$year <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][2]}))-2000
+```
+
+# Dataset cleaning 
 - sistema operativo mancante modelli molto vecchi di telefoni, non sono smartphone 
 - memory size mancante per gli stessi 
 
@@ -72,337 +107,99 @@ df <- df[-idxs, ]
 
 ```
 
-## NA
-Let's visualize the missing values after having removed the duplicated values 
-```{r}
-summary(df)
-```
+## Manage missing values
 Since there are only 10 missing values for battery size and 2 NAs for screen size, we can drop those observations.
 
 We notice that most of the missing values for memory size are relative to phones that are not smart-phones, for this reason we decided to substitute them with the median of the values for memory size of non-smartphones.TODO: sistemare
 For the highest/lowest price we'll just substitute the mean of those columns.
-```{r}
-df[which(is.na(df$battery_size)), ]
 
-```
-
+### Drop Battery and Screen size missing values rows
 ```{r}
 df <- df[- which(is.na(df$battery_size)),]
-```
-
-```{r}
-df[which(is.na(df$screen_size)), ]
-```
-
-```{r}
 df <- df[- which(is.na(df$screen_size)),]
 ```
 
-```{r}
-df[which(is.na(df$memory_size)), ]
-```
-We notice that most of the missing values are not smartphones... (os) TODO: spiegare quello che abbiamo fatto per la media
+### Impute memory size missing values
 
+We notice that most of the missing values are not smartphones... (os) TODO: spiegare quello che abbiamo fatto per la media
 ```{r}
 tmp <- df[which(df$os == ""),]$memory_size
 df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
 ```
 
 
+### substitute the highest/lowest price NA with the median of the column
 ```{r}
-summary(df)
-```
-
-```{r}
-# substitute the highest/lowest price NA with the median of the column
 tmp <- which(is.na(df$lowest_price))
 df$lowest_price[tmp] <- median(df$lowest_price[-tmp])
-
 ```
 
 ```{r}
-# substitute the highest/lowest price NA with the median of the column
 tmp <- which(is.na(df$highest_price))
 df$highest_price[tmp] <- median(df$highest_price[-tmp])
 
 ```
 
-Categorical
-```{r}
-df$brand_name <- factor(df$brand_name)
-df$os <- factor(df$os)
-
-```
-Popularity 
-Let's divide the popularity into levels,assigning three levels associated with a numeric score.
-
-From 0 to 400 -> low
-
-From 401 to 800 -> medium
-
-From 801 to 1224 -> high
-```{r}
-
-df$popularity <- as.numeric(df$popularity)
-
-tag <- c(0,400, 800, Inf)
-
-df$popularity_levels <- cut(df$popularity, breaks = tag,
-labels=c("low", "medium", "high"), include.lowest=TRUE)
-
-str(df)
-
-```
-To Euros
-```{r}
-
-df$best_price <- df$best_price*0.024
-df$lowest_price <- df$lowest_price*0.024
-df$highest_price <- df$highest_price*0.024
-
-summary(df)
-
-```
-Timestamps
-```{r}
-df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
-df$year <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][2]}))-2000
-```
-
+### Remove useless variables
 ```{r}
 # remove useless variables
-df$model_name <- NULL
-df$release_date <- NULL
-df$popularity <- NULL
+#df$model_name <- NULL
+#df$release_date <- NULL
+#df$popularity <- NULL
 ```
-## Correlation
+
+# Data Analysis
+## Correlation matrix
 ```{r}
+corr <- cor(df[, c(-1,-2, -3, -12, -13, -14, -15)], use="complete.obs" )
 
-corr <- cor(df[, c(-1,-2,-3, -12)], use="complete.obs" )
-
-ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE, colors=c("yellow", "gray", "purple"))
-
+ggcorrplot(corr, hc.order = TRUE, lab = TRUE, colors=c("yellow", "white", "purple"))
 ```
 TODO: explain what columns need to be removed (highest/lowest price)
-# Single plots and Outlier analysis
-
+## Single plots and Outlier analysis
+### Numerical
 TODO: -boxplots/other ideas
 ```{r}
-cols <- 4:10
+cols <- 4:11
 
 for (i in cols) {
-  hist(df[, i], main=colnames(df)[i])
+  layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+  par(mar=c(0,3.1,1.1,2.1))
+  boxplot(df[, i], horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i])
+  par(mar=c(4,3.1,1.1,2.1))
+  hist(df[, i],border = F, main = "", col="purple")
 }
 ```
-
-```{r fig.height=20, fig.width=20}
-layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
-par(mar=c(0,3.1,1.1,2.1))
-boxplot(df$best_price, horizontal = TRUE,  xaxt = "n", col= "red", frame= F)
-par(mar=c(4,3.1,1.1,2.1))
-hist(df$best_price,border = F, main = "")
-```
+### Categorical
 ```{r}
-summary(df$best_price[df$brand_name== "Apple"])
-
-summary(df$best_price)
-
-
-df[which.max(df$best_price),]
-```
-
-```{r}
-hist(log(df$sellers_amount), main="sellers_amount")
-hist(log(df$screen_size), main="screen_size")
-hist(log2(df$memory_size), main="memory_size")
-hist(log(df$battery_size), main="battery_size")
+for (i in c(1, 3, 13)) {
+  barplot(sort(table(df[, i])), main=colnames(df)[i], col="purple")
+}
 
 for (i in c(1, 3, 13)) {
-  barplot(sort(table(df[, i])), main=colnames(df)[i])
+  boxplot(df$best_price ~ df[, i],  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i])
 }
-
 ```
 
+### Pairs plot
+```{r fig.height=7.5, fig.width=7.5}
+pairs(df[cols], pch=19, lower.panel=panel.smooth)
+```
+
+# Preprocessing
+
+## Transformations
+
+## Split the dataset
 
 ```{r}
 
-df <- df[-which.max(df$screen_size), ]
-
 ```
-We can notice that now that the outlier is removed the plots are more readable.
-
-## Pairs
-```{r}
-
-pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
-
-```
-Lowest and highest price are missing togetherr drop them or impute by mean or impute by median or impute by regression
-## Remove Outlier
-```{r}
-
-df[which.max(df$screen_size), ]
-
-```
-We decided to remove the outlier.
 
 
-
-
-
-Let's split the variable release date.
-```{r}
-
-#ROBERTAAAAAAA
-
-# Divide la variabile solo se è nel formato corretto
-#date_split <- str_split(df$release_date, "-", simplify = TRUE)
-#if (ncol(date_split) == 2) {
- # df <- cbind(df, date_split)
-  #colnames(df)[ncol(df)] <- c("month", "year")
-
-  #df$month <- as.integer(df$month)
-  #df$year <- as.integer(df$year)
-#} else {
-  # Gestisci il caso in cui la variabile release_date non è nel formato atteso
-  #warning("La variabile release_date non è nel formato atteso.")
-#}
-
-```
-Let's substitute the NAs with the mean values
-
-### Drop row
-```{r}
-
-drop_df <- df[-which(is.na(df$lowest_price)), ]
-
-
-df_split_drop <- initial_split(drop_df, prop = .7)
-df_train_drop <- training(df_split_drop)
-df_test_drop  <- testing(df_split_drop)
-
-drop_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_train_drop)
-summary(drop_fit)
-
-```
-### Mean imputation
-```{r}
-
-mean_df <- df
-mean_df[which(is.na(df$lowest_price)), 6] <- mean(df[-which(is.na(df$lowest_price)), 6])
-
-df_split_mean <- initial_split(mean_df, prop = .7)
-df_train_mean <- training(df_split_mean)
-df_test_mean  <- testing(df_split_mean)
-
-mean_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_train_mean)
-summary(mean_fit)
-
-```
-### Median imputation
-```{r}
-
-median_df <- df
-median_df[which(is.na(df$lowest_price)), 6] <- median(df[-which(is.na(df$lowest_price)), 6])
-
-
-df_split_median <- initial_split(median_df, prop = .7)
-df_train_median <- training(df_split_median)
-df_test_median <- testing(df_split_median)
-
-median_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_split_median)
-summary(median_fit)
-
-median_df <- df
-median_df[which(is.na(df$lowest_price)), 6] <- median(df[-which(is.na(df$lowest_price)), 6])
-
-
-df_split_median <- initial_split(median_df, prop = .7)
-df_train_median <- training(df_split_median)
-df_test_median <- testing(df_split_median)
-
-median_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_split_median)
-summary(median_fit)
-
-summary(df$lowest_price)
-
-test <- df[which(is.na(df$lowest_price)), ]
-train <- df[-which(is.na(df$lowest_price)), ]
-
-# Impute missing values
-fit <- lm(lowest_price ~ popularity + screen_size + battery_size + memory_size, data=train)
-imputed <- predict(fit, test)
-summary(fit)
-
-regression_df <- df
-regression_df$lowest_price[which(is.na(df$lowest_price))] <- imputed
-summary(regression_df$lowest_price)
-
-```
-### Regression imputation
-```{r}
-
-df_split_regression <- initial_split(regression_df, prop = .7)
-df_train_regression <- training(df_split_regression)
-df_test_regression <- testing(df_split_regression)
-
-df_split_regression <- initial_split(regression_df, prop = .7)
-df_train_regression <- training(df_split_regression)
-df_test_regression <- testing(df_split_regression)
-
-regression_df <- df
-regression_df$lowest_price[which(is.na(df$lowest_price))] <- imputed
-summary(regression_df$lowest_price)
-
-df_split_regression <- initial_split(regression_df, prop = .7)
-df_train_regression <- training(df_split_regression)
-df_test_regression <- testing(df_split_regression)
-
-imputed_fit <- lm(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price, data=df_train_regression)
-summary(imputed_fit)
-
-```
 # Models
 
-**Comparison**
 ```{r}
 
-AIC(drop_fit, mean_fit, median_fit, imputed_fit)
-
-R2 <- c(summary(drop_fit)$adj.r.squared, summary(mean_fit)$adj.r.squared, summary(median_fit)$adj.r.squared, summary(imputed_fit)$adj.r.squared)
-names(R2) <- c("drop", "mean", "median", "imputed")
-
-as.data.frame(R2)
-
-RMSE_fun <- function(model, test) {
-  idxs.na <- apply(is.na(test), 1, any)
-  names(idxs.na) <- NULL
-  test.drop <- test[!idxs.na, ]
-  pred <- predict(model, test.drop)
-  sqrt(mean((test$best_price - pred)^2))
-}
-
-RMSE <- c(RMSE_fun(drop_fit, df_test_drop), RMSE_fun(mean_fit, df_test_mean), RMSE_fun(median_fit, df_test_median), RMSE_fun(imputed_fit, df_test_regression))
-names(RMSE) <- c("drop", "mean", "median", "imputed")
-
-as.data.frame(RMSE)
-
-df_split <- initial_split(drop_df, prop = .7)
-df_train <- training(df_split)
-df_test  <- testing(df_split)
-
-clf <- gam(best_price ~ popularity + s(screen_size) + s(battery_size) + s(memory_size) + s(lowest_price) + os, data=drop_df)
-summary(clf)
-
-set.seed(123)
-df_split <- initial_split(drop_df, prop = .7)
-df_train <- training(df_split)
-df_test  <- testing(df_split)
-
-tree <- rpart(best_price ~ popularity + screen_size + battery_size + memory_size + lowest_price + os, data=df_train)
-rpart.plot(tree)
-
-tree_pred <- predict(tree, df_test)
-sqrt(sum((df_test$best_price - tree_pred)^2))
-str(df)
 ```
+

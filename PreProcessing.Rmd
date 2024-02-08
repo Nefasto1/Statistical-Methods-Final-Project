@@ -1,20 +1,20 @@
 ---
 title: "Final_Project"
-author: "Marta Lucas"
+author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
 date: "`r Sys.Date()`"
 output: html_document
 ---
 # Imports
 ```{r}
 
-install.packages("mgcv")
-install.packages("dplyr")
-install.packages("rpart")
-install.packages("rpart.plot")
-install.packages("ipred")
-install.packages("caret")
-install.packages("stringr")
-install.packages("ggcorrplot")
+#install.packages("mgcv")
+#install.packages("dplyr")
+#install.packages("rpart")
+#install.packages("rpart.plot")
+#install.packages("ipred")
+#install.packages("caret")
+#install.packages("stringr")
+#install.packages("ggcorrplot")
 
 library(stringr)
 library(mgcv)        # GAMs
@@ -35,88 +35,18 @@ df <- read.csv("phones_data.csv", header=T)
 head(df)
 
 ```
-Categorical
 ```{r}
-
-df$brand_name <- factor(df$brand_name)
-df$os <- factor(df$os)
-
-```To Numeric
-```{r}
-
-df$popularity <- as.numeric(df$popularity)
-```
-To Euros
-```{r}
-
-df$best_price <- df$best_price*0.024
-df$lowest_price <- df$lowest_price*0.024
-df$highest_price <- df$highest_price*0.024
-
 summary(df)
-
 ```
-We can notice that there is an outlier in the sellers amount.
-
+TODO: elenco variabili categoriali e spiegazioni sul dataset
 ```{r}
-
-pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
-
+# rimozione colonna degli indici
+df$X <- NULL
 ```
-Identify the outlier, here we can see that the row has odd values, for example the best price was 28€ and the lowest price was higher than the highest price. Therefore the screen size is 75 inches.
+# Dataset cleaning 
 
-## Correlation
-```{r}
-
-corr <- cor(df[, c(-1,-2,-3, -12)], use="complete.obs" )
-
-ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE, colors=c("yellow", "gray", "purple"))
-
-```## Single Plots```{r}
-
-int <- c(0, 400, 800, Inf)
-df$popularity_level <- factor(cut(df$popularity, int, labels=c("low", "medium", "high")))
-
-cols <- 1:13
-
-for (i in cols[c(-1, -2, -3, -4, -12, -13)]) {
-  hist(df[, i], main=colnames(df)[i])
-}
-
-hist(log(df$sellers_amount), main="sellers_amount")
-hist(log(df$screen_size), main="screen_size")
-hist(log2(df$memory_size), main="memory_size")
-hist(log(df$battery_size), main="battery_size")
-
-for (i in c(1, 3, 13)) {
-  barplot(sort(table(df[, i])), main=colnames(df)[i])
-}
-
-```
-# Preprocess
-
-## Remove Outlier
-```{r}
-
-df[which.max(df$screen_size), ]
-
-```
-We decided to remove the outlier.
-
-```{r}
-
-df <- df[-which.max(df$screen_size), ]
-
-```
-We can notice that now that the outlier is removed the plots are more readable.
-
-## Pairs
-```{r}
-
-pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
-
-```
-Lowest and highest price are missing togetheror drop them or impute by mean or impute by median or impute by regression
+- sistema operativo mancante modelli molto vecchi di telefoni, non sono smartphone 
+- memory size mancante per gli stessi 
 
 ## Remove duplicated rows
 ```{r}
@@ -141,18 +71,69 @@ while (i <= length(idxs)){
 df <- df[-idxs, ]
 
 ```
+
 ## NA
+Let's visualize the missing values after having removed the duplicated values 
 ```{r}
+summary(df)
+```
+Since there are only 10 missing values for battery size and 2 NAs for screen size, we can drop those observations.
 
-df[which(is.na(df$lowest_price)), ]
-
-str(df)
-
-drop_df <- df[-which(is.na(df$lowest_price)), ]
+We notice that most of the missing values for memory size are relative to phones that are not smart-phones, for this reason we decided to substitute them with the median of the values for memory size of non-smartphones.TODO: sistemare
+For the highest/lowest price we'll just substitute the mean of those columns.
+```{r}
+df[which(is.na(df$battery_size)), ]
 
 ```
-Let's drop them
 
+```{r}
+df <- df[- which(is.na(df$battery_size)),]
+```
+
+```{r}
+df[which(is.na(df$screen_size)), ]
+```
+
+```{r}
+df <- df[- which(is.na(df$screen_size)),]
+```
+
+```{r}
+df[which(is.na(df$memory_size)), ]
+```
+We notice that most of the missing values are not smartphones... (os) TODO: spiegare quello che abbiamo fatto per la media
+
+```{r}
+tmp <- df[which(df$os == ""),]$memory_size
+df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
+```
+
+
+```{r}
+summary(df)
+```
+
+```{r}
+# substitute the highest/lowest price NA with the median of the column
+tmp <- which(is.na(df$lowest_price))
+df$lowest_price[tmp] <- median(df$lowest_price[-tmp])
+
+```
+
+```{r}
+# substitute the highest/lowest price NA with the median of the column
+tmp <- which(is.na(df$highest_price))
+df$highest_price[tmp] <- median(df$highest_price[-tmp])
+
+```
+
+Categorical
+```{r}
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+
+```
+Popularity 
 Let's divide the popularity into levels,assigning three levels associated with a numeric score.
 
 From 0 to 400 -> low
@@ -172,6 +153,103 @@ labels=c("low", "medium", "high"), include.lowest=TRUE)
 str(df)
 
 ```
+To Euros
+```{r}
+
+df$best_price <- df$best_price*0.024
+df$lowest_price <- df$lowest_price*0.024
+df$highest_price <- df$highest_price*0.024
+
+summary(df)
+
+```
+Timestamps
+```{r}
+df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
+df$year <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][2]}))-2000
+```
+
+```{r}
+# remove useless variables
+df$model_name <- NULL
+df$release_date <- NULL
+df$popularity <- NULL
+```
+## Correlation
+```{r}
+
+corr <- cor(df[, c(-1,-2,-3, -12)], use="complete.obs" )
+
+ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE, colors=c("yellow", "gray", "purple"))
+
+```
+TODO: explain what columns need to be removed (highest/lowest price)
+# Single plots and Outlier analysis
+
+TODO: -boxplots/other ideas
+```{r}
+cols <- 4:10
+
+for (i in cols) {
+  hist(df[, i], main=colnames(df)[i])
+}
+```
+
+```{r fig.height=20, fig.width=20}
+layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+par(mar=c(0,3.1,1.1,2.1))
+boxplot(df$best_price, horizontal = TRUE,  xaxt = "n", col= "red", frame= F)
+par(mar=c(4,3.1,1.1,2.1))
+hist(df$best_price,border = F, main = "")
+```
+```{r}
+summary(df$best_price[df$brand_name== "Apple"])
+
+summary(df$best_price)
+
+
+df[which.max(df$best_price),]
+```
+
+```{r}
+hist(log(df$sellers_amount), main="sellers_amount")
+hist(log(df$screen_size), main="screen_size")
+hist(log2(df$memory_size), main="memory_size")
+hist(log(df$battery_size), main="battery_size")
+
+for (i in c(1, 3, 13)) {
+  barplot(sort(table(df[, i])), main=colnames(df)[i])
+}
+
+```
+
+
+```{r}
+
+df <- df[-which.max(df$screen_size), ]
+
+```
+We can notice that now that the outlier is removed the plots are more readable.
+
+## Pairs
+```{r}
+
+pairs(df[c(-1, -2, -12)], pch=19, lower.panel=panel.smooth)
+
+```
+Lowest and highest price are missing togetherr drop them or impute by mean or impute by median or impute by regression
+## Remove Outlier
+```{r}
+
+df[which.max(df$screen_size), ]
+
+```
+We decided to remove the outlier.
+
+
+
+
+
 Let's split the variable release date.
 ```{r}
 

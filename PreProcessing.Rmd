@@ -73,6 +73,11 @@ df$lowest_price <- df$lowest_price*0.024
 df$highest_price <- df$highest_price*0.024
 ```
 
+### Make the os variable more readable
+```{r}
+levels(df$os) <- c("other", "Android", "other", "iOS", "other", "other", "other")
+```
+
 ### Split the timestamps
 ```{r}
 df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
@@ -123,7 +128,7 @@ df <- df[- which(is.na(df$screen_size)),]
 
 We notice that most of the missing values are not smartphones... (os) TODO: spiegare quello che abbiamo fatto per la media
 ```{r}
-tmp <- df[which(df$os == ""),]$memory_size
+tmp <- df[which(df$os == "other"),]$memory_size
 df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
 ```
 
@@ -160,7 +165,7 @@ TODO: explain what columns need to be removed (highest/lowest price)
 ### Numerical
 TODO: -boxplots/other ideas
 ```{r}
-cols <- 4:11
+cols <- 5:11
 
 for (i in cols) {
   layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
@@ -190,16 +195,139 @@ pairs(df[cols], pch=19, lower.panel=panel.smooth)
 
 ## Transformations
 
-## Split the dataset
+### Log transformation
+```{r}
+for (i in c(5:8, 11)){
+  df[, i] <- log(df[, i])
+}
+```
+
+### Log2 transformation
+```{r}
+df$memory_size <- floor(log2(df$memory_size*1e4))
+```
+
+### Add categorical variable
+
+The variables memory size and screen size are bimodal, we can add a categorical variable which differentiate smartphones from phones.
+We can do this setting to 1 (smartphone) if the memory size is greater than 14 and the screen size is greater than 3.5, 0 (phones) otherwise.
+```{r}
+df$phone_type <- factor((df$memory_size < 14), labels = c("smartphone", "phone"))
+```
 
 ```{r}
-
+layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+par(mar=c(0,3.1,1.1,2.1))
+boxplot(df$memory_size ~ df$phone_type, horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main="memory_size", ylim=c(4, 23))
+par(mar=c(4,3.1,1.1,2.1))
+hist(df$memory_size[which(df$phone_type == "smartphone")], breaks=5:25, main = "", col="purple", xlim=c(4, 23))
+hist(df$memory_size[which(df$phone_type == "phone")], breaks=5:25, main = "", col="yellow", add=T)
 ```
 
 
-# Models
-
 ```{r}
-
+layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+par(mar=c(0,3.1,1.1,2.1))
+boxplot(df$battery_size ~ df$phone_type, horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main="battery_size", ylim=c(5.5, 10.5))
+par(mar=c(4,3.1,1.1,2.1))
+hist(df$battery_size[which(df$phone_type == "smartphone")], breaks=seq(from=5, to=10, by=0.25), main = "", col="purple", xlim=c(5.5, 10.5))
+hist(df$battery_size[which(df$phone_type == "phone")], breaks=seq(from=5, to=10, by=0.25), main = "", col="yellow", add=T)
 ```
 
+```{r}
+tmp <- sort(table(df$brand_name))
+
+barplot(tmp, main="brand_names", col="purple")
+abline(h=40, col="red", lwd=2)
+abline(h=20, col="blue", lwd=2)
+abline(h=10, col="green", lwd=2)
+abline(h=1, col="yellow", lwd=2)
+```
+
+
+## Train-Test Split
+
+```{r}
+split <- initial_split(df, prop = 0.7)
+train <- training(split)
+test <- testing(split)
+
+for (i in 8:11){
+  mu  <- mean(train[, i])
+  std <- sd(train[, i])
+  
+  train[, i] <- (train[, i] - mu) / std
+  test[, i] <- (test[, i] - mu) / std
+}
+```
+
+# Model fitting
+
+```{r}
+summary(df)
+summary(test)
+```
+
+
+## Linear model
+### Default
+```{r}
+lm_model <- lm(best_price ~ os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year, data = train)
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
+```
+
+### Without Seller Amount
+```{r}
+lm_model <- lm(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month, data = train)
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
+```
+
+## GAM
+### Default
+```{r}
+fit_gam <- gam(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month, data = train)
+summary(fit_gam)
+
+y_hat <- predict(fit_gam, newdata = train)
+pred <- predict(fit_gam, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam))
+```
+
+### With Splines
+```{r}
+fit_gam <- gam(best_price ~ os + s(screen_size) + s(memory_size) + s(battery_size) + month, data = train)
+summary(fit_gam)
+
+y_hat <- predict(fit_gam, newdata = train)
+pred <- predict(fit_gam, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam))
+```
+
+## Regression Tree
+```{r fig.height=15, fig.width=15}
+fit_tree <- rpart(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data = train)
+rpart.plot(fit_tree)
+plotcp(fit_tree)
+
+pred <- predict(fit_tree, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+```
+
+## Random Forest
+```{r}
+library(randomForest)
+fit_rf <- randomForest(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month + year, data = train)
+fit_rf
+
+y_hat <- predict(fit_rf, newdata = train)
+pred <- predict(fit_rf, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+```

@@ -35,6 +35,22 @@ df <- read.csv("phones_data.csv", header=T)
 
 summary(df)
 ```
+## Dataset 
+
+| Variables      |       Description                            |    Type     |
+| -------------  | -------------------------------------------  |-------------|
+| brand_name     | Name of the phone brand                      |     chr     |
+| model_name     | Name of the phone model                      |     chr     |
+|    os          |    Operating system                          |     chr     |
+| Popularity     | The popularity of the phone in range 1-1224  |     int     |
+| Best Price     | Best price of the price-range in (UAH)       |     num     |
+| Lowest Price   | Highest price of the price-range in (UAH)    |     num     |
+| highest_price  | Lowest price of the price-range in (UAH)     |     num     |
+| Sellers amount |   The amount sellers sold the phone          |     num     |
+| Screen size    |  The size of phone's screen (inches).        |     num     |
+| Memory size    |  The size of the phone's memory (GB)         |     num     |
+| Battery size   |  The size of the phone's battery (mAh)       |     num     |
+| Release date   |  The launch date of the product on the market|     chr     |
 
 ## Variable cleaning
 

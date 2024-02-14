@@ -52,7 +52,7 @@ df$os <- factor(df$os)
 ```
 
  
-Let's divide the popularity into levels,assigning three levels associated with a numeric score.
+Let's divide the popularity into levels,assigning three levels associated with a numeric score. (Da mettere dopo, forse considerare split 25/50/25 (low/med/high) con i quartili)
 - From 0 to 400 -> low
 - From 401 to 800 -> medium
 - From 801 to 1224 -> high
@@ -74,6 +74,7 @@ df$highest_price <- df$highest_price*0.024
 ```
 
 ### Make the os variable more readable
+
 ```{r}
 levels(df$os) <- c("other", "Android", "other", "iOS", "other", "other", "other")
 ```
@@ -214,6 +215,10 @@ We can do this setting to 1 (smartphone) if the memory size is greater than 14 a
 ```{r}
 df$phone_type <- factor((df$memory_size < 14), labels = c("smartphone", "phone"))
 ```
+
+### Check me
+
+Da vedere se ha senso separare (solo durante la data analysis) le due "famiglie"
 
 ```{r}
 layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )

@@ -67,20 +67,6 @@ df$brand_name <- factor(df$brand_name)
 df$os <- factor(df$os)
 ```
 
- 
-Let's divide the popularity into levels,assigning three levels associated with a numeric score. (Da mettere dopo, forse considerare split 25/50/25 (low/med/high) con i quartili)
-- From 0 to 400 -> low
-- From 401 to 800 -> medium
-- From 801 to 1224 -> high
-```{r}
-df$popularity <- as.numeric(df$popularity)
-
-tag <- c(0,400, 800, Inf)
-
-df$popularity_levels <- cut(df$popularity, breaks = tag,
-labels=c("low", "medium", "high"), include.lowest=TRUE)
-```
-
 ### Convert the prices to euros
 ```{r}
 
@@ -127,6 +113,22 @@ while (i <= length(idxs)){
 
 df <- df[-idxs, ]
 
+```
+
+ 
+Let's divide the popularity into levels,assigning three levels associated with a numeric score. (Da mettere dopo, forse considerare split 25/50/25 (low/med/high) con i quartili)
+- From 0 to 400 -> low
+- From 401 to 800 -> medium
+- From 801 to 1224 -> high
+```{r}
+df$popularity <- as.numeric(df$popularity)
+
+
+
+tag <- c(0, quantile(df$popularity, 0.25), quantile(df$popularity, 0.75), Inf)
+
+df$popularity_levels <- cut(df$popularity, breaks = tag,
+labels=c("low", "medium", "high"), include.lowest=TRUE)
 ```
 
 ## Manage missing values
@@ -245,7 +247,6 @@ hist(df$memory_size[which(df$phone_type == "smartphone")], breaks=5:25, main = "
 hist(df$memory_size[which(df$phone_type == "phone")], breaks=5:25, main = "", col="yellow", add=T)
 ```
 
-
 ```{r}
 layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
 par(mar=c(0,3.1,1.1,2.1))
@@ -264,7 +265,50 @@ abline(h=20, col="blue", lwd=2)
 abline(h=10, col="green", lwd=2)
 abline(h=1, col="yellow", lwd=2)
 ```
+```{r}
+sum(tmp[tmp <= 5])/sum(tmp)
+```
 
+#### Other
+```{r}
+to_remove <- names(tmp[tmp <= 5])
+
+vals <- c()
+for (i in 1:length(levels(df$brand_name))){
+  if (any(levels(df$brand_name)[i] == to_remove)){
+    vals <- c(vals, "other")
+  } else {
+    vals <- c(vals, levels(df$brand_name)[i])
+  }
+}
+
+levels(df$brand_name) <- vals
+```
+
+#### Drop
+```{r}
+to_remove <- names(tmp[tmp <= 5])
+
+idxs <- c()
+for (i in 1:length(df$brand_name)){
+  if (any(df$brand_name[i] == to_remove)){
+    idxs <- c(idxs, i)
+  }
+}
+
+df <- df[-idxs,]
+
+vals <- c()
+for (i in 1:length(levels(df$brand_name))){
+  if (any(levels(df$brand_name)[i] == to_remove)){
+    vals <- c(vals, "Samsung")
+  } else {
+    vals <- c(vals, levels(df$brand_name)[i])
+  }
+}
+
+levels(df$brand_name) <- vals
+```
 
 ## Train-Test Split
 
@@ -293,7 +337,7 @@ summary(test)
 ## Linear model
 ### Default
 ```{r}
-lm_model <- lm(best_price ~ os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year, data = train)
+lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year, data = train)
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
@@ -345,7 +389,7 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 ## Random Forest
 ```{r}
 library(randomForest)
-fit_rf <- randomForest(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month + year, data = train)
+fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data = train)
 fit_rf
 
 y_hat <- predict(fit_rf, newdata = train)

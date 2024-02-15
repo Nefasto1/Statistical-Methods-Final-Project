@@ -123,12 +123,11 @@ Let's divide the popularity into levels,assigning three levels associated with a
 ```{r}
 df$popularity <- as.numeric(df$popularity)
 
-
-
-tag <- c(0, quantile(df$popularity, 0.25), quantile(df$popularity, 0.75), Inf)
+tag <- c(0, quantile(df$popularity, 0.25), quantile(df$popularity, 0.5),quantile(df$popularity, 0.75), Inf)
+#tag <- c(0, 400, 800, Inf)
 
 df$popularity_levels <- cut(df$popularity, breaks = tag,
-labels=c("low", "medium", "high"), include.lowest=TRUE)
+labels=c("low", "medium-low", "medium-high", "high"), include.lowest=TRUE)
 ```
 
 ## Manage missing values
@@ -256,6 +255,7 @@ hist(df$battery_size[which(df$phone_type == "smartphone")], breaks=seq(from=5, t
 hist(df$battery_size[which(df$phone_type == "phone")], breaks=seq(from=5, to=10, by=0.25), main = "", col="yellow", add=T)
 ```
 
+
 ```{r}
 tmp <- sort(table(df$brand_name))
 
@@ -266,7 +266,9 @@ abline(h=10, col="green", lwd=2)
 abline(h=1, col="yellow", lwd=2)
 ```
 ```{r}
-sum(tmp[tmp <= 5])/sum(tmp)
+c("Total"=sum(tmp),
+"Leq 5"=sum(tmp[tmp <= 5]),
+"Proportion (%)"=sum(tmp[tmp <= 5])/sum(tmp) * 100)
 ```
 
 #### Other
@@ -287,28 +289,35 @@ levels(df$brand_name) <- vals
 
 #### Drop
 ```{r}
-to_remove <- names(tmp[tmp <= 5])
+#to_remove <- names(tmp[tmp <= 5])
 
-idxs <- c()
-for (i in 1:length(df$brand_name)){
-  if (any(df$brand_name[i] == to_remove)){
-    idxs <- c(idxs, i)
-  }
-}
+#idxs <- c()
+#for (i in 1:length(df$brand_name)){
+#  if (any(df$brand_name[i] == to_remove)){
+#    idxs <- c(idxs, i)
+#  }
+#}
 
-df <- df[-idxs,]
+#df <- df[-idxs,]
 
-vals <- c()
-for (i in 1:length(levels(df$brand_name))){
-  if (any(levels(df$brand_name)[i] == to_remove)){
-    vals <- c(vals, "Samsung")
-  } else {
-    vals <- c(vals, levels(df$brand_name)[i])
-  }
-}
+#vals <- c()
+#for (i in 1:length(levels(df$brand_name))){
+#  if (any(levels(df$brand_name)[i] == to_remove)){
+#    vals <- c(vals, "Samsung")
+#  } else {
+#    vals <- c(vals, levels(df$brand_name)[i])
+#  }
+#}
 
-levels(df$brand_name) <- vals
+#¯levels(df$brand_name) <- vals
 ```
+
+```{r}
+tmp <- sort(table(df$brand_name))
+
+barplot(tmp, main="brand_names", col="purple")
+```
+
 
 ## Train-Test Split
 
@@ -336,8 +345,8 @@ summary(test)
 
 ## Linear model
 ### Default
-```{r}
-lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year, data = train)
+```{r warning=FALSE}
+lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
@@ -347,7 +356,7 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 
 ### Without Seller Amount
 ```{r}
-lm_model <- lm(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month, data = train)
+lm_model <- lm(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month + phone_type + popularity_levels, data = train)
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
@@ -357,8 +366,8 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 
 ## GAM
 ### Default
-```{r}
-fit_gam <- gam(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month, data = train)
+```{r fig.height=5, fig.width=5}
+fit_gam <- gam(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month + phone_type + popularity_levels, data = train)
 summary(fit_gam)
 
 y_hat <- predict(fit_gam, newdata = train)
@@ -368,7 +377,7 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 
 ### With Splines
 ```{r}
-fit_gam <- gam(best_price ~ os + s(screen_size) + s(memory_size) + s(battery_size) + month, data = train)
+fit_gam <- gam(best_price ~ os + s(screen_size) + s(memory_size) + s(battery_size) + month + phone_type + popularity_levels, data = train)
 summary(fit_gam)
 
 y_hat <- predict(fit_gam, newdata = train)
@@ -377,8 +386,8 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 ```
 
 ## Regression Tree
-```{r fig.height=15, fig.width=15}
-fit_tree <- rpart(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data = train)
+```{r fig.height=10, fig.width=10}
+fit_tree <- rpart(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
 rpart.plot(fit_tree)
 plotcp(fit_tree)
 
@@ -389,10 +398,137 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 ## Random Forest
 ```{r}
 library(randomForest)
-fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data = train)
-fit_rf
+fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train, ntree=500, importance=T, proximitry=T, mtry=5)
 
 y_hat <- predict(fit_rf, newdata = train)
 pred <- predict(fit_rf, newdata = test)
 c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+
+varImpPlot(fit_rf, sort=T, n.var= 8, main= "Historical area vs. currently present", pch=16)
 ```
+
+## MARS
+```{r}
+library(earth)     # fit MARS models
+
+fit_mars <- earth(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+fit_mars
+
+y_hat <- predict(fit_mars, newdata = train)
+pred <- predict(fit_mars, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+```
+
+# Test
+
+```{r warning=FALSE}
+
+library(randomForest)
+tmp <- sort(table(df$brand_name))
+df2 <- df
+
+RMSE_tr <- c()
+RMSE_te <- c()
+R2_tr <- c()
+R2_te <- c()
+AIC_tr <- c()
+
+for (j in 1:15) {
+  df <- df2
+  to_remove <- names(tmp[tmp <= j])
+
+  vals <- c()
+  for (i in 1:length(levels(df$brand_name))){
+    if (any(levels(df$brand_name)[i] == to_remove)){
+      vals <- c(vals, "other")
+    } else {
+      vals <- c(vals, levels(df$brand_name)[i])
+    }
+  }
+
+  levels(df$brand_name) <- vals
+
+  mean_RMSE_tr <- c()
+  mean_RMSE_te <- c()
+  mean_R2_tr <- c()
+  mean_R2_te <- c()
+  mean_AIC_tr <- c()
+  
+  for (k in 1:10) {
+    split <- initial_split(df, prop = 0.7, strata = "brand_name")
+    train <- training(split)
+    test <- testing(split)
+
+    for (i in 8:11){
+      mu  <- mean(train[, i])
+      std <- sd(train[, i])
+  
+      train[, i] <- (train[, i] - mu) / std
+      test[, i] <- (test[, i] - mu) / std
+    }
+
+    model <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train, ntree=500, importance=T, proximitry=T, mtry=5)
+    #model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+
+    y_hat <- predict(model, newdata = train)
+    pred <- predict(model, newdata = test)
+    
+    mean_RMSE_tr <- c(mean_RMSE_tr, RMSE(y_hat, train$best_price))
+    mean_RMSE_te <- c(mean_RMSE_te, RMSE(pred, test$best_price))
+    mean_R2_tr <- c(mean_R2_tr, R2(y_hat, train$best_price))
+    mean_R2_te <- c(mean_R2_te, R2(pred, test$best_price))
+    #mean_AIC_tr <- c(mean_AIC_tr, AIC(model))
+  }
+
+  RMSE_tr <- c(RMSE_tr, mean(mean_RMSE_tr))
+  RMSE_te <- c(RMSE_te, mean(mean_RMSE_te))
+  R2_tr <- c(R2_tr, mean(mean_R2_tr))
+  R2_te <- c(R2_te, mean(mean_R2_te))
+  AIC_tr <- c(AIC_tr, mean(mean_AIC_tr))
+}
+```
+
+```{r}
+plot(RMSE_tr, type="l", col="red", ylim=c(0, 0.5))
+lines(RMSE_te, col="blue")
+abline(v=which.min((RMSE_te+RMSE_tr)/2), col="green", lwd=2)
+legend("topright", legend=c("Train", "Test", "Best"), col=c("red", "blue", "green"), lty=1:1)
+
+plot(R2_tr, type="l", col="red", ylim=c(0, 1))
+lines(R2_te, col="blue")
+abline(v=which.max(R2_te+R2_tr), col="darkgreen", lwd=2)
+legend("bottomleft", legend=c("Train", "Test", "Best"), col=c("red", "blue", "darkgreen"), lty=1:1)
+
+#plot(AIC_tr, type="l", col="red")
+#abline(v=which.min((RMSE_te+RMSE_tr)/2), col="green", lwd=2)
+#abline(v=which.max(R2_te+R2_tr), col="darkgreen", lwd=2)
+#legend("topright", legend=c("AIC", "Best RMSE", "Best R2"), col=c("red", "green", "darkgreen"), lty=1:1)
+```
+
+
+```{r}
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(model))
+}
+```
+
+
+```{r}
+train_control <- trainControl(method="LOOCV")
+
+model <- train(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data=train, method="lm", trControl=train_control)
+summary(model)
+
+y_hat <- predict(model, newdata = train)
+pred <- predict(model, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
+```
+
+```{r}
+library(glmnet)
+
+ridge <- glmnet(train[, -c(1, 2, 4, 5, 6, 7)], train$best_price, alpha=0)
+
+plot(ridge, xvar = "lambda", label = TRUE)
+plot(ridge, xvar = "dev", label = TRUE)
+```
+

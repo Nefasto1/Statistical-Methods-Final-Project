@@ -75,10 +75,31 @@ df$lowest_price <- df$lowest_price*0.024
 df$highest_price <- df$highest_price*0.024
 ```
 
+### Remove me
+```{r}
+table(df$os)
+
+# plot(df[df$os == ""], df$memory_size[df$os == ""])
+
+#hist(df$memory_size[df$os != c("Android","iOS")])
+hist(df$memory_size[df$os == "EMUI"], xlim = c(0,1000), col = "red", ylim = c(0,100))
+hist(df$memory_size[df$os == "KAIOS"], xlim = c(0,1000), add = TRUE, col = "blue")
+hist(df$memory_size[df$os == "OxygenOS"], xlim = c(0,1000), add = TRUE, col = "green")
+hist(df$memory_size[df$os == "WindowsPhone"], xlim = c(0,1000), add = TRUE, col = "purple")
+hist(df$memory_size[df$os == ""], xlim = c(0,1000), add = TRUE, col = "yellow")
+```
+
 ### Make the os variable more readable
 
 ```{r}
-levels(df$os) <- c("other", "Android", "other", "iOS", "other", "other", "other")
+levels(df$os) <- c("other", "Android", "Android", "iOS", "other", "Android", "Android")
+```
+
+### Gestione Meizu outlier
+```{r}
+df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),] # soft check
+df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),]$os = "Android"
+
 ```
 
 ### Split the timestamps
@@ -117,17 +138,21 @@ df <- df[-idxs, ]
 
  
 Let's divide the popularity into levels,assigning three levels associated with a numeric score. (Da mettere dopo, forse considerare split 25/50/25 (low/med/high) con i quartili)
-- From 0 to 400 -> low
-- From 401 to 800 -> medium
-- From 801 to 1224 -> high
+- From 0 to 25% -> low
+- From 25% to 50% -> medium-low
+- From 50% to 75% -> medium-high
+- From 75% to 100% -> high
+
 ```{r}
 df$popularity <- as.numeric(df$popularity)
 
-tag <- c(0, quantile(df$popularity, 0.25), quantile(df$popularity, 0.5),quantile(df$popularity, 0.75), Inf)
-#tag <- c(0, 400, 800, Inf)
+# tag <- c(0, quantile(df$popularity, 0.25), quantile(df$popularity, 0.5),quantile(df$popularity, 0.75), Inf)
+
+tag <- quantile(df$popularity)
 
 df$popularity_levels <- cut(df$popularity, breaks = tag,
 labels=c("low", "medium-low", "medium-high", "high"), include.lowest=TRUE)
+
 ```
 
 ## Manage missing values
@@ -164,6 +189,7 @@ df$highest_price[tmp] <- median(df$highest_price[-tmp])
 ```
 
 ### Remove useless variables
+(le possiamo tenere per mantenere le info delle righe, ma non usiamo nei modelli)
 ```{r}
 # remove useless variables
 #df$model_name <- NULL
@@ -183,24 +209,25 @@ TODO: explain what columns need to be removed (highest/lowest price)
 ### Numerical
 TODO: -boxplots/other ideas
 ```{r}
-cols <- 5:11
+cols <- c(5, 8:11)
 
 for (i in cols) {
   layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
   par(mar=c(0,3.1,1.1,2.1))
-  boxplot(df[, i], horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i])
+  boxplot(df[, i], horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i]) # xaxt
   par(mar=c(4,3.1,1.1,2.1))
   hist(df[, i],border = F, main = "", col="purple")
 }
 ```
 ### Categorical
+Capire come gestire i brand names nei plot delle categoriali. Ricordarsi dell'interpretazione del best price al variare dei mesi (09/10 release Iphone , 02 release molti Samsung)
 ```{r}
-for (i in c(1, 3, 13)) {
+for (i in c(1, 3, 13, 14, 15)) {
   barplot(sort(table(df[, i])), main=colnames(df)[i], col="purple")
 }
 
-for (i in c(1, 3, 13)) {
-  boxplot(df$best_price ~ df[, i],  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i])
+for (i in c(1, 3, 13, 14, 15)) {
+  boxplot(df$best_price ~ df[, i], col= "yellow", frame= F, main=colnames(df)[i])
 }
 ```
 
@@ -229,13 +256,41 @@ df$memory_size <- floor(log2(df$memory_size*1e4))
 
 The variables memory size and screen size are bimodal, we can add a categorical variable which differentiate smartphones from phones.
 We can do this setting to 1 (smartphone) if the memory size is greater than 14 and the screen size is greater than 3.5, 0 (phones) otherwise.
+
+
 ```{r}
 df$phone_type <- factor((df$memory_size < 14), labels = c("smartphone", "phone"))
 ```
 
 ### Check me
 
+```{r}
+cols <- c(5, 8:11)
+
+for (i in cols) {
+  layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+  par(mar=c(0,3.1,1.1,2.1))
+  boxplot(df[, i], horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i]) # xaxt
+  par(mar=c(4,3.1,1.1,2.1))
+  hist(df[, i],border = F, main = "", col="purple")
+}
+```
+
 Da vedere se ha senso separare (solo durante la data analysis) le due "famiglie"
+Da fare un ciclo per vedere tutte le var al cambiare di phone type.
+```{r}
+colnames(df)
+cols <- c(5, 8:11, 13, 14)
+for (i in cols){
+  layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+  par(mar=c(0,3.1,1.1,2.1))
+  boxplot(df[,i] ~ df$phone_type, horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i], ylim=c(min(df[,i])-1, max(df[,i])+1))
+  par(mar=c(4,3.1,1.1,2.1))
+  hist(df[which(df$phone_type == "smartphone"), i], main = "", breaks = seq(min(df[,i]-1), max(df[,i])+1), col="purple", xlim=c(min(df[,i])-1, max(df[,i])+1))
+  hist(df[which(df$phone_type == "phone"), i], breaks = seq(min(df[,i]-1), max(df[,i])+1), main = "", col="yellow", add=T)
+}
+```
+
 
 ```{r}
 layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
@@ -254,7 +309,14 @@ par(mar=c(4,3.1,1.1,2.1))
 hist(df$battery_size[which(df$phone_type == "smartphone")], breaks=seq(from=5, to=10, by=0.25), main = "", col="purple", xlim=c(5.5, 10.5))
 hist(df$battery_size[which(df$phone_type == "phone")], breaks=seq(from=5, to=10, by=0.25), main = "", col="yellow", add=T)
 ```
-
+```{r}
+layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+par(mar=c(0,3.1,1.1,2.1))
+boxplot(df$screen_size ~ df$phone_type, horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main="screen_size", ylim=c(0, 12))
+par(mar=c(4,3.1,1.1,2.1))
+hist(df$screen_size[which(df$phone_type == "smartphone")], breaks=seq(from=0, to=10, by=1), main = "", col="purple", xlim=c(0, 12))
+hist(df$screen_size[which(df$phone_type == "phone")], breaks=seq(from=0, to=10, by=1), main = "", col="yellow", add=T)
+```
 
 ```{r}
 tmp <- sort(table(df$brand_name))
@@ -264,6 +326,7 @@ abline(h=40, col="red", lwd=2)
 abline(h=20, col="blue", lwd=2)
 abline(h=10, col="green", lwd=2)
 abline(h=1, col="yellow", lwd=2)
+abline(h=5, col="orange", lwd=2)
 ```
 ```{r}
 c("Total"=sum(tmp),
@@ -345,23 +408,47 @@ summary(test)
 
 ## Linear model
 ### Default
+
+Aggiungere le interazioni, capire come gestire brand_name
 ```{r warning=FALSE}
 lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
 ```
 
-### Without Seller Amount
-```{r}
-lm_model <- lm(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month + phone_type + popularity_levels, data = train)
+
+## Testing with interactions
+```{r warning=FALSE}
+lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + phone_type*screen_size + phone_type*memory_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
+```
+## Testing removing some vars
+
+removed: month, pop, sellers amount
+```{r warning=FALSE}
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size +  year + phone_type, data = train)
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
+```
+### Testing removing vars + interactions 
+same removed vars
+```{r warning=FALSE}
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size*phone_type + screen_size + memory_size*phone_type + memory_size + battery_size +  year + phone_type, data = train)
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
 ```
 
 ## GAM

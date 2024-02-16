@@ -31,3 +31,19 @@ Paper relativo a sto dataset: https://medikom.iocspublisher.org/index.php/JTI/ar
  - First data analysis (graphs + cor matrix)
  - Analyze + motivate dropping some vars (highest, lowest & outlier)
    
+
+# Stuff to do & ask Gioia
+
+ - Gestire il telefono con os == "" e memory size alta (512)
+ - WindowsPhone, EMUI, OxygenOS  -> Android, KAIOS -> vecchi, "" -> vecchi
+ - Brand name, come gestirlo visto che ci sono troppe classi
+ - E' giusto rimuovere i duplicati e sostitute la pop con la media 
+ - Memory size dei vecchietti, ha senso come la gestiamo?
+ - Provare le interazioni con la nuova variabile categoriale "phone type"
+
+# Models ideas:
+ - Linear models (test vari) (Rob)
+ - Ensemble methods (ricordati che si usa la media) (Nicola)
+ - Regression trees (Stefano)
+ - MARS (da vedere)
+ - GAM & splines varie (Marta)

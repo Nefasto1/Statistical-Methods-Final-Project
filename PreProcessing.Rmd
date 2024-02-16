@@ -75,20 +75,6 @@ df$lowest_price <- df$lowest_price*0.024
 df$highest_price <- df$highest_price*0.024
 ```
 
-### Remove me
-```{r}
-table(df$os)
-
-# plot(df[df$os == ""], df$memory_size[df$os == ""])
-
-#hist(df$memory_size[df$os != c("Android","iOS")])
-hist(df$memory_size[df$os == "EMUI"], xlim = c(0,1000), col = "red", ylim = c(0,100))
-hist(df$memory_size[df$os == "KAIOS"], xlim = c(0,1000), add = TRUE, col = "blue")
-hist(df$memory_size[df$os == "OxygenOS"], xlim = c(0,1000), add = TRUE, col = "green")
-hist(df$memory_size[df$os == "WindowsPhone"], xlim = c(0,1000), add = TRUE, col = "purple")
-hist(df$memory_size[df$os == ""], xlim = c(0,1000), add = TRUE, col = "yellow")
-```
-
 ### Make the os variable more readable
 
 ```{r}
@@ -99,7 +85,6 @@ levels(df$os) <- c("other", "Android", "Android", "iOS", "other", "Android", "An
 ```{r}
 df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),] # soft check
 df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),]$os = "Android"
-
 ```
 
 ### Split the timestamps
@@ -221,6 +206,8 @@ for (i in cols) {
 ```
 ### Categorical
 Capire come gestire i brand names nei plot delle categoriali. Ricordarsi dell'interpretazione del best price al variare dei mesi (09/10 release Iphone , 02 release molti Samsung)
+
+#### Provare test set 2021
 ```{r}
 for (i in c(1, 3, 13, 14, 15)) {
   barplot(sort(table(df[, i])), main=colnames(df)[i], col="purple")
@@ -279,7 +266,6 @@ for (i in cols) {
 Da vedere se ha senso separare (solo durante la data analysis) le due "famiglie"
 Da fare un ciclo per vedere tutte le var al cambiare di phone type.
 ```{r}
-colnames(df)
 cols <- c(5, 8:11, 13, 14)
 for (i in cols){
   layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
@@ -322,21 +308,26 @@ hist(df$screen_size[which(df$phone_type == "phone")], breaks=seq(from=0, to=10, 
 tmp <- sort(table(df$brand_name))
 
 barplot(tmp, main="brand_names", col="purple")
-abline(h=40, col="red", lwd=2)
-abline(h=20, col="blue", lwd=2)
-abline(h=10, col="green", lwd=2)
-abline(h=1, col="yellow", lwd=2)
-abline(h=5, col="orange", lwd=2)
+#abline(h=40, col="red", lwd=2)
+#abline(h=20, col="blue", lwd=2)
+abline(h=40, col="pink", lwd=4)
+#abline(h=10, col="green", lwd=2)
+#abline(h=1, col="yellow", lwd=2)
+#abline(h=5, col="orange", lwd=2)
+
+
 ```
 ```{r}
 c("Total"=sum(tmp),
-"Leq 5"=sum(tmp[tmp <= 5]),
-"Proportion (%)"=sum(tmp[tmp <= 5])/sum(tmp) * 100)
+"Leq 5"=sum(tmp[tmp <= 40]),
+"Proportion (%)"=sum(tmp[tmp <= 40])/sum(tmp) * 100)
+
+
 ```
 
 #### Other
 ```{r}
-to_remove <- names(tmp[tmp <= 5])
+to_remove <- names(tmp[tmp <= 15])
 
 vals <- c()
 for (i in 1:length(levels(df$brand_name))){
@@ -348,6 +339,7 @@ for (i in 1:length(levels(df$brand_name))){
 }
 
 levels(df$brand_name) <- vals
+table(vals)
 ```
 
 #### Drop
@@ -383,11 +375,19 @@ barplot(tmp, main="brand_names", col="purple")
 
 
 ## Train-Test Split
-
+Come gestiamo le info temp? Ha senso standardizzarle? Forse campioniamo. 
 ```{r}
 split <- initial_split(df, prop = 0.7)
 train <- training(split)
 test <- testing(split)
+```
+
+
+```{r}
+sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
+
+train <- sorted_df[1:round(nrow(sorted_df) * 0.8),]
+test <- sorted_df[round(nrow(sorted_df) * 0.8):nrow(sorted_df),]
 
 for (i in 8:11){
   mu  <- mean(train[, i])
@@ -408,6 +408,7 @@ summary(test)
 
 ## Linear model
 ### Default
+Check residui, qqplot, leverage, cook's distance
 
 Aggiungere le interazioni, capire come gestire brand_name
 ```{r warning=FALSE}
@@ -418,7 +419,16 @@ y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
 ```
+## Testing without brand name
 
+```{r warning=FALSE}
+lm_model <- lm(best_price ~ os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
+```
 
 ## Testing with interactions
 ```{r warning=FALSE}
@@ -508,7 +518,7 @@ c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_
 
 # Test
 
-```{r warning=FALSE}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 
 library(randomForest)
 tmp <- sort(table(df$brand_name))
@@ -575,7 +585,7 @@ for (j in 1:15) {
 }
 ```
 
-```{r}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 plot(RMSE_tr, type="l", col="red", ylim=c(0, 0.5))
 lines(RMSE_te, col="blue")
 abline(v=which.min((RMSE_te+RMSE_tr)/2), col="green", lwd=2)
@@ -593,13 +603,13 @@ legend("bottomleft", legend=c("Train", "Test", "Best"), col=c("red", "blue", "da
 ```
 
 
-```{r}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(model))
 }
 ```
 
 
-```{r}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 train_control <- trainControl(method="LOOCV")
 
 model <- train(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data=train, method="lm", trControl=train_control)
@@ -610,7 +620,7 @@ pred <- predict(model, newdata = test)
 c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
 ```
 
-```{r}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 library(glmnet)
 
 ridge <- glmnet(train[, -c(1, 2, 4, 5, 6, 7)], train$best_price, alpha=0)

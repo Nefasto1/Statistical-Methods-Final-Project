@@ -377,13 +377,16 @@ barplot(tmp, main="brand_names", col="purple")
 ## Train-Test Split
 Come gestiamo le info temp? Ha senso standardizzarle? Forse campioniamo. 
 ```{r}
-split <- initial_split(df, prop = 0.7)
-train <- training(split)
-test <- testing(split)
+#split <- initial_split(df, prop = 0.7)
+#train <- training(split)
+#test <- testing(split)
 ```
 
 
 ```{r}
+
+df$epoch <- (df$year - 13) * 12 + df$month
+
 sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
 
 train <- sorted_df[1:round(nrow(sorted_df) * 0.8),]

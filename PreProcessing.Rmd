@@ -218,13 +218,21 @@ Capire come gestire i brand names nei plot delle categoriali. Ricordarsi dell'in
 TODO: controllare il codice 
 ```{r}
 
-for (i in c(1,3,13,14)) {
-  p1 <- ggplot(data = data.frame(x = sort(names(table(df[, i]))), y = as.numeric(table(df[, i]))),
+for (i in c(1,3)) {
+  p1 <- ggplot(data = data.frame(x = names(sort(table(df[, i]))), y = as.numeric(table(df[, i])))[order(sorted_data$x)],
          aes(x = x, y = y, fill = x)) +
-    geom_bar(fill= "purple",stat = "identity") + ggtitle(toupper(colnames(df)[i])) + labs(x = colnames(df)[i], y = "count") + theme(plot.title = element_text(hjust = 0.5, size=16, face="bold.italic"))
+    geom_bar(fill= "purple",color = "black", stat = "identity") + ggtitle(toupper(colnames(df)[i])) + labs(x = colnames(df)[i], y = "count")  + theme(plot.title = element_text(hjust = 0.5, size=16, face="bold.italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
   plot(p1)
 }
 #  NB - non si riescono a riordinare i mesi, probabilmente li sta riordinando come caratteri alfanumerici, non interi
+```
+```{r}
+for (i in c(13,14)) {
+  p1 <- ggplot(data = data.frame(x = factor(sort(as.numeric(names(table(df[, i]))))), y = as.numeric(table(df[, i]))),
+         aes(x = x, y = y, fill = x)) +
+    geom_bar(fill= "purple",color = "black", stat = "identity") + ggtitle(toupper(colnames(df)[i])) + labs(x = colnames(df)[i], y = "count") + theme(plot.title = element_text(hjust = 0.5, size=16, face="bold.italic"))
+  plot(p1)
+}
 ```
 
 ```{r}
@@ -235,9 +243,9 @@ for (i in c(1, 3, 13, 14, 15)) {
 }
 ```
 
-### Pairs plot
-```{r fig.height=7.5, fig.width=7.5, warning=FALSE}}
-
+### Pairs plot --> valutare di rimuovere, mozione approvata da Marta e Stefano
+```{r fig.height=7.5, fig.width=7.5, message=FALSE, warning=FALSE}
+cols <- c(5:11,13, 14)
 df_subset <- df[cols]
 
 ggpairs(df_subset, columns = 1:length(cols), lower = list(geom_smooth()))
@@ -581,19 +589,24 @@ results9 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_pr
 ```
 
 ```{r}
+start <- Sys.time()
 # interactions between continuos variables and continuos with categorical
-fit_gam10 <- gam(best_price ~  s(screen_size, memory_size) + s(battery_size, memory_size)+ 
-                 s(screen_size, by = os)  + s(memory_size, by = os) +s(battery_size, by= os) + 
+fit_gam10 <- gam(best_price ~  screen_size* memory_size+ s(battery_size, memory_size)+ 
+                 s(screen_size, by = os)  +s(battery_size, by= os) + 
                   s(sellers_amount, by = popularity_levels) + s(month, by = popularity_levels) + 
-                  brand_name + os + popularity_levels, data = train, method = "REML")
+                  brand_name , data = train, method = "REML")
+end <- Sys.time()
+
 
 summary(fit_gam10)
 
 y_hat <- predict(fit_gam10, newdata = train)
 
 pred <- predict(fit_gam10, newdata = test)
-results10 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam10))
+results10 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam10) , "Time"=end-start)
 ```
+
+
 
 ```{r}
 # concatenate results in a matrix
@@ -608,12 +621,70 @@ The best models without interactions are GAM5 and GAM4, with the lowest RMSE and
 
 Interactions seem to be important! GAM 6,7,8 The best result is GAM8, we considered the interactions
 between month,sellers amount with popularity levels ans screen size, memory size, battery size with os.
+After adding the interactions for the continuous variables, the best model is GAM10, with the lowest RMSE and AIC.
+
+
 Note: -la standardizzazione del train set va been? penso di si, anche se ci sono q.tà negative?
 - il dato temporale sembra non essere particolarmente importante in questi modelli, c'è qualcosa di 
 sbagliato? -> forse si può effettivamente provare a fare un trainset random 
 - Non ho fatto il grafico dei residui di tutto se no , buonanotte 
 
 - Custom ggplots, cambiare lo sfondo etc.. x plot + carini (da proporre a Nicola)
+
+### Other ideas to try improve best models
+
+- interaction between month, year as c.v./ other temporal series related materials
+- GAMMs but not covered by the course, do they even apply?
+- try to vary k k.check (read article) # hmm
+-other families ?(family.mgcv) --> gaussian seems right though
+- play with basis functions
+(adding interactons with brand_name seems too computationally expensive)
+
+```{r}
+k.check(fit_gam5) 
+# according to the article i read we should make k larger in the first two cases
+```
+```{r}
+# with splines and brand_name, month with k=12
+fit_gam5.1 <- gam(best_price ~ s(screen_size) + s(memory_size) + s(battery_size)+ s(month, k=12) + brand_name, data = train, method = "REML")
+summary(fit_gam5.1)
+
+y_hat <- predict(fit_gam5.1, newdata = train)
+pred <- predict(fit_gam5.1, newdata = test)
+results5.1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam5.1))
+```
+```{r}
+# interactions between continuos variables and continuos with categorical, interaction bwtween month and year
+fit_gam10.1 <- gam(best_price ~  s(screen_size, memory_size) + s(battery_size, memory_size)+  s(sellers_amount, by = popularity_levels) + s(month, by = popularity_levels) +
+brand_name  , data = train, method = "REML")
+
+summary(fit_gam10.1)
+
+y_hat <- predict(fit_gam10.1, newdata = train)
+
+pred <- predict(fit_gam10.1, newdata = test)
+results10.1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam10.1))
+```
+```{r}
+k.check(fit_gam10.1)
+```
+```{r}
+par(mfrow=c(2,2))
+gam.check(fit_gam10.1)
+```
+
+
+
+```{r}
+tests <- rbind(results5 ,results5.1, results10, results10.1)
+rownames(tests) <- c("GAM5","GAM5.1", "GAM10", "GAM10.1")
+colnames <- c("RMSE", "R2", "RMSE_test", "R2_test", "AIC")
+tests
+```
+
+
+
+
 
 
 

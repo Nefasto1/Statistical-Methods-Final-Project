@@ -1,0 +1,125 @@
+---
+title: "Linear model incompleto"
+output: html_document
+date: "2024-02-20"
+---
+
+```{r warning=FALSE}
+
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + epoch + popularity_levels, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+
+
+
+result1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result1
+
+```
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+
+
+
+result2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result2
+```
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + phone_type:memory_size + phone_type:screen_size + phone_type:battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+
+library(car)
+vif(lm_model)
+
+result3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+
+```
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + phone_type:memory_size + phone_type:screen_size + os:memory_size + os:screen_size + os:battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+
+
+
+result4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+
+```
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + phone_type:memory_size + phone_type:screen_size + sellers_amount:popularity_levels, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+
+
+
+result5 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+```
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + phone_type:memory_size + phone_type:screen_size + s, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+
+
+
+result5 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+```
+
+
+
+```{r}
+results_lol <- rbind(result1, result2, result3, result4, result5)
+rownames(results_lol) <- c("lm1", "lm2", "lm3", "lm4", "lm5")
+results_lol
+```

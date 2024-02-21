@@ -529,22 +529,88 @@ plot(lm_model)
 ## GAM
 ### Default
 ```{r fig.height=5, fig.width=5}
-fit_gam <- gam(best_price ~ os + phone_type + screen_size + memory_size + battery_size + month + phone_type + popularity_levels, data = train)
-summary(fit_gam)
+# all variables without splines
+start <- Sys.time()
+fit_gam0 <- gam(best_price ~ os + sellers_amount+ phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels + brand_name , data = train)
+end <- Sys.time()
+summary(fit_gam0)
 
-y_hat <- predict(fit_gam, newdata = train)
-pred <- predict(fit_gam, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam))
+y_hat <- predict(fit_gam0, newdata = train)
+pred <- predict(fit_gam0, newdata = test)
+results0<- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam0), "BIC"= BIC(fit_gam0), "Time"=end-start)
 ```
+### Removed month, year, sellers amount, popularity levels, phone type
+```{r}
+# without month, year, sellers amount, popularity levels, phone type
+start <- Sys.time()
+fit_gam1 <- gam(best_price ~ os + screen_size + memory_size + battery_size + brand_name, data = train)
+end <- Sys.time()
+summary(fit_gam1)
 
+y_hat <- predict(fit_gam1, newdata = train)
+pred <- predict(fit_gam1, newdata = test)
+results1<- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam1), "BIC"= BIC(fit_gam1), "Time"=end-start)
+```
 ### With Splines
 ```{r}
-fit_gam <- gam(best_price ~ os + s(screen_size) + s(memory_size) + s(battery_size) + month + phone_type + popularity_levels, data = train)
-summary(fit_gam)
+# all continuos variables with splines, also all categorical variables included
+start <- Sys.time()
+fit_gam2 <- gam(best_price ~ os + s(screen_size) + s(memory_size) + s(battery_size) + s(sellers_amount) + s(month)+  phone_type + popularity_levels + brand_name, data = train, method = "REML")
+end <- Sys.time()
+summary(fit_gam2)
 
-y_hat <- predict(fit_gam, newdata = train)
-pred <- predict(fit_gam, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam))
+y_hat <- predict(fit_gam2, newdata = train)
+pred <- predict(fit_gam2, newdata = test)
+results2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam2), "BIC"= BIC(fit_gam2), "Time"=end-start)
+```
+### model with splines, without phone type, month, popularity levels, sellers amount
+```{r}
+start <- Sys.time()
+fit_gam3 <- gam(best_price ~  s(screen_size) + s(memory_size) + s(battery_size)+ sellers_amount + brand_name, data = train, method = "REML")
+end <- Sys.time()
+summary(fit_gam3)
+
+y_hat <- predict(fit_gam3, newdata = train)
+pred <- predict(fit_gam3, newdata = test)
+results3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam3), "BIC"= BIC(fit_gam3), "Time"=end-start)
+```
+
+```{r}
+# interactions with os
+start <- Sys.time()
+fit_gam4 <- gam(best_price ~  s(screen_size, by = os) + s(memory_size, by=os) + s(memory_size) + s(battery_size) + brand_name, data = train, method = "REML")
+end <- Sys.time()
+summary(fit_gam4)
+
+y_hat <- predict(fit_gam4, newdata = train)
+pred <- predict(fit_gam4, newdata = test)
+
+results4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam4), "BIC"= BIC(fit_gam4), "Time"=end-start)
+```
+
+
+
+```{r}
+# concatenate results in a matrix
+results_gam <- rbind(results0, results1, results2, results3, results4)
+rownames(results_gam) <- c("Default", "Removed non-significant vars", "With Splines", "Removed non-significant vars", "Added interactions with os")
+colnames <- c("RMSE", "R2", "RMSE_test", "R2_test", "AIC", "BIC", "Time")
+results_gam
+```
+```{r}
+# check residuals
+par(mfrow=c(2,2))
+plot(fit_gam4)
+```
+```{r}
+par(mfrow=c(2,2))
+plot(fit_gam4,residuals= TRUE, pch= 19)
+```
+
+
+```{r}
+#par(mfrow=c(2,2))
+gam.check(fit_gam4)
 ```
 
 ## Regression Tree

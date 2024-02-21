@@ -410,58 +410,120 @@ summary(test)
 
 
 ## Linear model
-### Default
-Check residui, qqplot, leverage, cook's distance
 
-Aggiungere le interazioni, capire come gestire brand_name
+### Start Model
+
 ```{r warning=FALSE}
-lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + epoch + popularity_levels, data = train)
+
+end <- Sys.time()
+
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
-```
-## Testing without brand name
 
-```{r warning=FALSE}
-lm_model <- lm(best_price ~ os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
-summary(lm_model)
-
-y_hat <- predict(lm_model, newdata = train)
-pred <- predict(lm_model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
+result1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result1
 ```
 
-## Testing with interactions
-```{r warning=FALSE}
-lm_model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + phone_type*screen_size + phone_type*memory_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+### Removed epoch, popularity_levels and sellers_amount
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size, data = train)
+
+end <- Sys.time()
+
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
+
+result2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result2
 ```
-## Testing removing some vars
 
-removed: month, pop, sellers amount
-```{r warning=FALSE}
-lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size +  year + phone_type, data = train)
+### Added interactions
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + phone_type:memory_size + phone_type:screen_size + phone_type:battery_size, data = train)
+
+end <- Sys.time()
+
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
+
+result3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result3
 ```
-### Testing removing vars + interactions 
-same removed vars
-```{r warning=FALSE}
-lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size*phone_type + screen_size + memory_size*phone_type + memory_size + battery_size +  year + phone_type, data = train)
+
+### Removed battery_size and phone_type:battery_size
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + phone_type:memory_size + phone_type:screen_size, data = train)
+
+end <- Sys.time()
+
 summary(lm_model)
 
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model))
+
+result4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result4
+```
+
+### Added interations with sellers_amount and popularity_levels
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + phone_type + screen_size + memory_size + phone_type:memory_size + phone_type:screen_size + sellers_amount:popularity_levels, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result5 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result5
+```
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + I(screen_size^3) + poly(memory_size, 3) + poly(battery_size, 2), data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result6 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result6
+```
+
+
+```{r}
+results_lm <- rbind(result1, result2, result3, result4, result5, result6)
+rownames(results_lm) <- c("Start Model", "Removed epoch, popularity_levels and sellers_amount", "Added interactions", "Removed battery_size and phone_type:battery_size", "Added interations with sellers_amount and popularity_levels", "Polynomial")
+results_lm
+```
+
+
+```{r}
+plot(lm_model)
 ```
 
 ## GAM

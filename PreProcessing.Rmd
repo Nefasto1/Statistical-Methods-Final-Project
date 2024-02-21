@@ -613,150 +613,70 @@ plot(fit_gam4,residuals= TRUE, pch= 19)
 gam.check(fit_gam4)
 ```
 
-## Regression Tree
+## Trees
+```{r}
+tree_matrix <- matrix(nrow=4, ncol=5, dimnames=list(c("Regression Tree", "Random Forest", "Pre-Pruning", "MARS"), c("RMSE", "R2", "RMSE_test", "R2_test", "Time")))
+```
+
+### Regression Tree
 ```{r fig.height=10, fig.width=10}
-fit_tree <- rpart(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+start <- Sys.time()
+fit_tree <- rpart(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train)
+end <- Sys.time()
 rpart.plot(fit_tree)
 plotcp(fit_tree)
 
+y_hat <- predict(fit_tree, newdata = train)
 pred <- predict(fit_tree, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+tree_matrix[1, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
 ```
 
-## Random Forest
+### Random Forest
 ```{r}
 library(randomForest)
-fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train, ntree=500, importance=T, proximitry=T, mtry=5)
+start <- Sys.time()
+fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train, ntree=200, importance=T, proximitry=T, mtry=5)
+end <- Sys.time()
 
 y_hat <- predict(fit_rf, newdata = train)
 pred <- predict(fit_rf, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+tree_matrix[2, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
+
+tree_matrix[2, ]
 
 varImpPlot(fit_rf, sort=T, n.var= 8, main= "Historical area vs. currently present", pch=16)
 ```
 
-## MARS
+#### Pre-pruning
+```{r}
+start <- Sys.time()
+fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train, ntree=200, importance=T, proximitry=T, mtry=5, maxnodes=52)
+end <- Sys.time()
+
+y_hat <- predict(fit_rf, newdata = train)
+pred <- predict(fit_rf, newdata = test)
+tree_matrix[3, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
+
+tree_matrix[3, ]
+
+varImpPlot(fit_rf, sort=T, n.var= 8, main= "Historical area vs. currently present", pch=16)
+```
+
+## MARS To Remove (?)
 ```{r}
 library(earth)     # fit MARS models
 
-fit_mars <- earth(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
+start <- Sys.time()
+fit_mars <- earth(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train)
+end <- Sys.time()
 fit_mars
 
 y_hat <- predict(fit_mars, newdata = train)
 pred <- predict(fit_mars, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price))
+
+tree_matrix[4, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
 ```
 
-# Test
-
-```{r eval=FALSE, warning=FALSE, include=FALSE}
-
-library(randomForest)
-tmp <- sort(table(df$brand_name))
-df2 <- df
-
-RMSE_tr <- c()
-RMSE_te <- c()
-R2_tr <- c()
-R2_te <- c()
-AIC_tr <- c()
-
-for (j in 1:15) {
-  df <- df2
-  to_remove <- names(tmp[tmp <= j])
-
-  vals <- c()
-  for (i in 1:length(levels(df$brand_name))){
-    if (any(levels(df$brand_name)[i] == to_remove)){
-      vals <- c(vals, "other")
-    } else {
-      vals <- c(vals, levels(df$brand_name)[i])
-    }
-  }
-
-  levels(df$brand_name) <- vals
-
-  mean_RMSE_tr <- c()
-  mean_RMSE_te <- c()
-  mean_R2_tr <- c()
-  mean_R2_te <- c()
-  mean_AIC_tr <- c()
-  
-  for (k in 1:10) {
-    split <- initial_split(df, prop = 0.7, strata = "brand_name")
-    train <- training(split)
-    test <- testing(split)
-
-    for (i in 8:11){
-      mu  <- mean(train[, i])
-      std <- sd(train[, i])
-  
-      train[, i] <- (train[, i] - mu) / std
-      test[, i] <- (test[, i] - mu) / std
-    }
-
-    model <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train, ntree=500, importance=T, proximitry=T, mtry=5)
-    #model <- lm(best_price ~ brand_name + os + phone_type + sellers_amount + screen_size + memory_size + battery_size + month + year + phone_type + popularity_levels, data = train)
-
-    y_hat <- predict(model, newdata = train)
-    pred <- predict(model, newdata = test)
-    
-    mean_RMSE_tr <- c(mean_RMSE_tr, RMSE(y_hat, train$best_price))
-    mean_RMSE_te <- c(mean_RMSE_te, RMSE(pred, test$best_price))
-    mean_R2_tr <- c(mean_R2_tr, R2(y_hat, train$best_price))
-    mean_R2_te <- c(mean_R2_te, R2(pred, test$best_price))
-    #mean_AIC_tr <- c(mean_AIC_tr, AIC(model))
-  }
-
-  RMSE_tr <- c(RMSE_tr, mean(mean_RMSE_tr))
-  RMSE_te <- c(RMSE_te, mean(mean_RMSE_te))
-  R2_tr <- c(R2_tr, mean(mean_R2_tr))
-  R2_te <- c(R2_te, mean(mean_R2_te))
-  AIC_tr <- c(AIC_tr, mean(mean_AIC_tr))
-}
+```{r}
+tree_matrix
 ```
-
-```{r eval=FALSE, warning=FALSE, include=FALSE}
-plot(RMSE_tr, type="l", col="red", ylim=c(0, 0.5))
-lines(RMSE_te, col="blue")
-abline(v=which.min((RMSE_te+RMSE_tr)/2), col="green", lwd=2)
-legend("topright", legend=c("Train", "Test", "Best"), col=c("red", "blue", "green"), lty=1:1)
-
-plot(R2_tr, type="l", col="red", ylim=c(0, 1))
-lines(R2_te, col="blue")
-abline(v=which.max(R2_te+R2_tr), col="darkgreen", lwd=2)
-legend("bottomleft", legend=c("Train", "Test", "Best"), col=c("red", "blue", "darkgreen"), lty=1:1)
-
-#plot(AIC_tr, type="l", col="red")
-#abline(v=which.min((RMSE_te+RMSE_tr)/2), col="green", lwd=2)
-#abline(v=which.max(R2_te+R2_tr), col="darkgreen", lwd=2)
-#legend("topright", legend=c("AIC", "Best RMSE", "Best R2"), col=c("red", "green", "darkgreen"), lty=1:1)
-```
-
-
-```{r eval=FALSE, warning=FALSE, include=FALSE}
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(model))
-}
-```
-
-
-```{r eval=FALSE, warning=FALSE, include=FALSE}
-train_control <- trainControl(method="LOOCV")
-
-model <- train(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year, data=train, method="lm", trControl=train_control)
-summary(model)
-
-y_hat <- predict(model, newdata = train)
-pred <- predict(model, newdata = test)
-c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model))
-```
-
-```{r eval=FALSE, warning=FALSE, include=FALSE}
-library(glmnet)
-
-ridge <- glmnet(train[, -c(1, 2, 4, 5, 6, 7)], train$best_price, alpha=0)
-
-plot(ridge, xvar = "lambda", label = TRUE)
-plot(ridge, xvar = "dev", label = TRUE)
-```
-

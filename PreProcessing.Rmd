@@ -27,6 +27,9 @@ library(rpart.plot)  # plotting regression trees
 library(ipred)       # bagging
 library(caret)
 library(ggcorrplot)
+library(ICglm)
+library(randomForest)
+library(earth)
 ```
 
 ## Import dataset
@@ -425,7 +428,7 @@ summary(lm_model)
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 
-result1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
 result1
 ```
 
@@ -442,7 +445,7 @@ summary(lm_model)
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 
-result2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
 result2
 ```
 
@@ -459,7 +462,7 @@ summary(lm_model)
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 
-result3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
 result3
 ```
 
@@ -476,7 +479,7 @@ summary(lm_model)
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 
-result4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
 result4
 ```
 
@@ -494,7 +497,7 @@ summary(lm_model)
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 
-result5 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result5 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
 result5
 ```
 
@@ -510,7 +513,7 @@ summary(lm_model)
 y_hat <- predict(lm_model, newdata = train)
 pred <- predict(lm_model, newdata = test)
 
-result6 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "Time"=end-start)
+result6 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
 result6
 ```
 
@@ -520,7 +523,6 @@ results_lm <- rbind(result1, result2, result3, result4, result5, result6)
 rownames(results_lm) <- c("Start Model", "Removed epoch, popularity_levels and sellers_amount", "Added interactions", "Removed battery_size and phone_type:battery_size", "Added interations with sellers_amount and popularity_levels", "Polynomial")
 results_lm
 ```
-
 
 ```{r}
 plot(lm_model)
@@ -533,12 +535,12 @@ plot(lm_model)
 start <- Sys.time()
 fit_gam0 <- gam(best_price ~ os + sellers_amount+ phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels + brand_name , data = train)
 end <- Sys.time()
-summary(fit_gam0)
 
 y_hat <- predict(fit_gam0, newdata = train)
 pred <- predict(fit_gam0, newdata = test)
-results0<- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam0), "BIC"= BIC(fit_gam0), "Time"=end-start)
+results0<- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam0), "BIC"= BIC(fit_gam0), "GCV"=GCV(fit_gam0), "Time"=end-start)
 ```
+
 ### Removed month, year, sellers amount, popularity levels, phone type
 ```{r}
 # without month, year, sellers amount, popularity levels, phone type
@@ -549,8 +551,9 @@ summary(fit_gam1)
 
 y_hat <- predict(fit_gam1, newdata = train)
 pred <- predict(fit_gam1, newdata = test)
-results1<- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam1), "BIC"= BIC(fit_gam1), "Time"=end-start)
+results1<- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam1), "BIC"= BIC(fit_gam1), "GCV"=GCV(fit_gam1), "Time"=end-start)
 ```
+
 ### With Splines
 ```{r}
 # all continuos variables with splines, also all categorical variables included
@@ -561,8 +564,9 @@ summary(fit_gam2)
 
 y_hat <- predict(fit_gam2, newdata = train)
 pred <- predict(fit_gam2, newdata = test)
-results2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam2), "BIC"= BIC(fit_gam2), "Time"=end-start)
+results2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam2), "BIC"= BIC(fit_gam2), "GCV"=GCV(fit_gam2), "Time"=end-start)
 ```
+
 ### model with splines, without phone type, month, popularity levels, sellers amount
 ```{r}
 start <- Sys.time()
@@ -572,9 +576,10 @@ summary(fit_gam3)
 
 y_hat <- predict(fit_gam3, newdata = train)
 pred <- predict(fit_gam3, newdata = test)
-results3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam3), "BIC"= BIC(fit_gam3), "Time"=end-start)
+results3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam3), "BIC"= BIC(fit_gam3), "GCV"=GCV(fit_gam3), "Time"=end-start)
 ```
 
+### Added interactions with os
 ```{r}
 # interactions with os
 start <- Sys.time()
@@ -585,23 +590,23 @@ summary(fit_gam4)
 y_hat <- predict(fit_gam4, newdata = train)
 pred <- predict(fit_gam4, newdata = test)
 
-results4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam4), "BIC"= BIC(fit_gam4), "Time"=end-start)
+results4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(fit_gam4), "BIC"= BIC(fit_gam4), "GCV"=GCV(fit_gam4), "Time"=end-start)
 ```
-
 
 
 ```{r}
 # concatenate results in a matrix
 results_gam <- rbind(results0, results1, results2, results3, results4)
 rownames(results_gam) <- c("Default", "Removed non-significant vars", "With Splines", "Removed non-significant vars", "Added interactions with os")
-colnames <- c("RMSE", "R2", "RMSE_test", "R2_test", "AIC", "BIC", "Time")
 results_gam
 ```
+
 ```{r}
 # check residuals
 par(mfrow=c(2,2))
 plot(fit_gam4)
 ```
+
 ```{r}
 par(mfrow=c(2,2))
 plot(fit_gam4,residuals= TRUE, pch= 19)
@@ -614,12 +619,8 @@ gam.check(fit_gam4)
 ```
 
 ## Trees
-```{r}
-tree_matrix <- matrix(nrow=4, ncol=5, dimnames=list(c("Regression Tree", "Random Forest", "Pre-Pruning", "MARS"), c("RMSE", "R2", "RMSE_test", "R2_test", "Time")))
-```
-
 ### Regression Tree
-```{r fig.height=10, fig.width=10}
+```{r}
 start <- Sys.time()
 fit_tree <- rpart(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train)
 end <- Sys.time()
@@ -628,21 +629,18 @@ plotcp(fit_tree)
 
 y_hat <- predict(fit_tree, newdata = train)
 pred <- predict(fit_tree, newdata = test)
-tree_matrix[1, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
+tree_results <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=NA, "BIC"=NA, "GCV"=NA, "Time"=end-start)
 ```
 
 ### Random Forest
 ```{r}
-library(randomForest)
 start <- Sys.time()
 fit_rf <- randomForest(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train, ntree=200, importance=T, proximitry=T, mtry=5)
 end <- Sys.time()
 
 y_hat <- predict(fit_rf, newdata = train)
 pred <- predict(fit_rf, newdata = test)
-tree_matrix[2, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
-
-tree_matrix[2, ]
+rf_results <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=NA, "BIC"=NA, "GCV"=NA, "Time"=end-start)
 
 varImpPlot(fit_rf, sort=T, n.var= 8, main= "Historical area vs. currently present", pch=16)
 ```
@@ -655,17 +653,13 @@ end <- Sys.time()
 
 y_hat <- predict(fit_rf, newdata = train)
 pred <- predict(fit_rf, newdata = test)
-tree_matrix[3, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
-
-tree_matrix[3, ]
+pre_results <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=NA, "BIC"=NA, "GCV"=NA, "Time"=end-start)
 
 varImpPlot(fit_rf, sort=T, n.var= 8, main= "Historical area vs. currently present", pch=16)
 ```
 
 ## MARS To Remove (?)
 ```{r}
-library(earth)     # fit MARS models
-
 start <- Sys.time()
 fit_mars <- earth(best_price ~ brand_name + os + phone_type + screen_size + memory_size + battery_size + month + year + popularity_levels, data = train)
 end <- Sys.time()
@@ -674,9 +668,20 @@ fit_mars
 y_hat <- predict(fit_mars, newdata = train)
 pred <- predict(fit_mars, newdata = test)
 
-tree_matrix[4, ] <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "Time"=end-start)
+mars_results <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=NA, "BIC"=NA, "GCV"=fit_mars$gcv, "Time"=end-start)
 ```
 
 ```{r}
-tree_matrix
+results_tree <- rbind(tree_results, rf_results, pre_results, mars_results)
+rownames(results_tree) <- c("Regression Tree", "Random Forest", "Pre-pruning", "MARS")
+results_tree
 ```
+
+```{r}
+results <- rbind(results_lm, results_gam, results_tree)
+results
+```
+
+```{r}
+```
+

@@ -1,0 +1,362 @@
+# Quarto version
+
+---
+title: "Final_Project"
+author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Setup
+
+```{r, include = FALSE}
+# List of packages
+packages <- c("stringr", "mgcv", "rsample", "dplyr", "rpart", "rpart.plot", "ipred", "caret", "ggcorrplot", "gbm", "GGally", "gridExtra")
+
+# Function to check and install packages
+check_and_install <- function(pkg){
+  if(!require(pkg, character.only = TRUE)){
+    install.packages(pkg, dependencies = TRUE)
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# Apply the function to the list of packages
+sapply(packages, check_and_install)
+```
+
+## Import the libraries
+
+```{r}
+library(stringr)
+library(mgcv)        # GAMs
+library(rsample)     # data splitting
+library(dplyr)       # data wrangling
+library(rpart)       # performing regression trees
+library(rpart.plot)  # plotting regression trees
+library(ipred)       # bagging
+library(caret) 
+library(ggcorrplot)
+library(gbm)         # gradient boosting
+library(gridExtra)
+```
+
+
+# Data analysis
+
+## Dataset loading
+
+```{r}
+df <- read.csv("phones_data.csv", header=T)
+
+summary(df)
+```
+
+
+| Variables      |       Description                            |    Type     |
+| -------------  | -------------------------------------------  |-------------|
+| brand_name     | Name of the phone brand                      |     chr     |
+| model_name     | Name of the phone model                      |     chr     |
+|    os          |    Operating system                          |     chr     |
+| Popularity     | The popularity of the phone in range 1-1224  |     int     |
+| Best Price     | Best price of the price-range in (UAH)       |     num     |
+| Lowest Price   | Highest price of the price-range in (UAH)    |     num     |
+| highest_price  | Lowest price of the price-range in (UAH)     |     num     |
+| Sellers amount |   The amount sellers sold the phone          |     num     |
+| Screen size    |  The size of phone's screen (inches).        |     num     |
+| Memory size    |  The size of the phone's memory (GB)         |     num     |
+| Battery size   |  The size of the phone's battery (mAh)       |     num     |
+| Release date   |  The launch date of the product on the market|     chr     |
+
+
+## Dataset cleaning
+
+### Removing the index column
+```{r}
+df$X = NULL
+```
+
+### Factorizing the categorical variables
+
+```{r}
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+```
+
+### Managing missing variables
+#### Battery_size and screen_size handling
+We decided to drop the rows having missing variables for `battery_size` and `screen_size` since they were in low number.
+```{r}
+df <- df[- which(is.na(df$battery_size)),]
+df <- df[- which(is.na(df$screen_size)),]
+```
+
+For the rows having missing values for `highest_price` and `lowest_price` we substitued them with a value that is resistant to outliers, namely the median.
+#### Highest/Lowest_price handling
+```{r}
+tmp <- which(is.na(df$lowest_price))
+df$lowest_price[tmp] <- median(df$lowest_price[-tmp])
+```
+```{r}
+tmp <- which(is.na(df$highest_price))
+df$highest_price[tmp] <- median(df$highest_price[-tmp])
+
+```
+
+#### Memory_size handling
+We noticed that the only rows having `NA` in the `memory_size` feature were those with `os == ""`. Further investigation shows that this `blank` os refers to very simple phones that are usually given to elderly people. We decided to label them as `other`.
+```{r}
+# Replace empty strings in df$os with "other"
+df$os <- sub("^$", "other", df$os)
+```
+```{r}
+summary(df[df$os == "other", "memory_size" ])
+```
+```{r}
+# Plot the standardized 'memory_size' column
+memory_size_other <- df[df$os == "other", "memory_size"]
+
+# Get the indices of the top 5 values
+top5_indices <- order(memory_size_other, decreasing = TRUE)[1:5]
+
+# Create a color vector
+colors <- rep("black", length(memory_size_other))
+colors[top5_indices] <- "red"
+
+# Plot the 'memory_size' column for 'other' OS with the top 5 values colored red
+plot(memory_size_other, main = "Memory Size for 'other' OS", ylab = "Memory Size", col = colors, type = "p")
+```
+Given the presence of such big outliers, we decided to substitute the NA with the median of the data having "other" as the `os` feature.
+```{r}
+tmp <- df[which(df$os == "other"),]$memory_size
+df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
+```
+
+
+### Converting prices
+
+#### Aux function for € conversion
+```{r}
+# Function to convert currency A to Euros
+convert_to_euros <- function(value, conversion_rate = 0.024) {
+  # Return the value in Euros
+  return(value * conversion_rate)
+}
+```
+#### Conversion
+```{r}
+df$best_price <- convert_to_euros(df$best_price)
+df$lowest_price <- convert_to_euros(df$lowest_price)
+df$highest_price <- convert_to_euros(df$highest_price)
+```
+
+### Improving readibility of the os variable
+
+```{r}
+table(df$os)
+```
+
+We notice that, for the `os` feature, __2__ are  __EMUI__, __1__ is __KAIOS__, __3__ are __OxygenOS__ and __3__ are __WindowsPhone__. We decided to lable them either __Android__ or __other__ based on which class theyr features were closer to.
+
+
+#### Labeling of the other OSs
+
+```{r}
+# Function to calculate the mean of all numeric columns for each value of df$os
+calculate_means <- function(df) {
+  # Split the data frame by the 'os' column
+  split_df <- split(df, df$os)
+  
+  # Function to calculate the mean of each column
+  mean_fun <- function(x) {
+    if(is.numeric(x)) mean(x, na.rm = TRUE) else NULL
+  }
+  
+  # Apply the function to each subset of the data frame
+  mean_df <- lapply(split_df, function(x) sapply(x, mean_fun))
+  
+  # Remove NULL elements (non-numeric columns)
+  mean_df <- lapply(mean_df, function(x) x[!sapply(x, is.null)])
+  
+  # Convert the list back to a data frame
+  mean_df <- do.call(rbind, mean_df)
+  
+  return(mean_df)
+}
+
+calculate_means(df)
+```
+
+From these results we decided to relable them in this way:
+ - __EMUI__ -> __Android__
+ - __KAIOS__ -> __other__
+ - __OxygenOS__ -> __Android__
+ - __WindowsPhone__ -> __Android__
+
+```{r}
+# Recode the 'os' column
+levels(df$os) <- c("other", "Android", "Android", "iOS", "other", "Android", "Android")
+```
+
+### Handling outlier
+
+From our previous data exploration there was one phone having `os == "other"` with a relatively big value for its `memory_size` feature. We decided to lable it as __Android__.
+
+```{r}
+df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),]$os = "Android"
+```
+
+### Splitting the timestamp
+
+To better explore the relationship between `best_price` and `release_date` we decided to split the latter variable in two features: `month` and `year`. For simpler reading we subtracted 2000 to the years.
+```{r}
+df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
+df$year <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][2]}))-2000
+```
+
+### Checking for duplicates
+
+We first check for duplicates inside the data, not considering the features `popularity` and `model_name`
+```{r}
+idxs <- which(duplicated(df[,c(-2, -4)]))
+
+df[idxs[0:10],]
+```
+
+We decide to aggregate the duplicates in one row, having its `popularity` subsituted by the mean of the duplicates.
+```{r}
+idxs <- which(duplicated(df[,c(-2, -4)]))
+
+succ <- idxs[-length(idxs)] - idxs[-1] == -1
+succ <- c(succ, FALSE)
+
+i = 1
+while (i <= length(idxs)){
+  start = idxs[i]-1
+  sum <- c(df$popularity[idxs[i]])
+  while (succ[i] == TRUE){
+    i = i + 1
+    sum <- c(sum, df$popularity[idxs[i]])
+  }
+  df$popularity[start] <- mean(c(sum, df$popularity[start]))
+  i = i + 1
+}
+
+df <- df[-idxs, ]
+```
+
+### Handling popularity
+
+We decided to group phones by their `popularity` in a new variable called `popularity_level` defined as:
+  - Phones below the first `popularity` quartile are labeled as __low__
+  - Phones above the first `popularity` quartile and below the second are labeled as __low-medium__
+  - Phones above the second `popularity` quartile and below the third are labeled as __medium-high__
+  - Phones above the third `popularity` quartile are labeled as __high__
+
+```{r}
+df$popularity <- as.numeric(df$popularity)
+
+tag <- quantile(df$popularity)
+
+df$popularity_levels <- cut(df$popularity, breaks = tag,
+labels=c("low", "medium-low", "medium-high", "high"), include.lowest=TRUE)
+```
+
+## Dataset exploration
+
+### Correlation matrix
+We begin by computing the correlation matrix between the quantitative variables
+
+```{r}
+# Select the numeric columns
+df_numeric <- df[sapply(df, is.numeric)]
+
+# Compute the correlation matrix
+cor_matrix <- cor(df_numeric, use = "complete.obs")
+
+ggcorrplot(cor_matrix, hc.order = TRUE, lab = TRUE, colors=c("yellow", "white", "purple"))
+```
+
+From this matrix we can deduce:
+  - The features `highest_price` and `lowest_price` are pretty much linearly correlated with `best_price`
+  - `memory_size` also shows a strong positive correlation with `best_price` and a mild postive correlation with `screen_size`
+  - `year`, `popularity`, `sellers_amount` and `screen_size` show a light positive correlation
+  - `month` and `battery_size` show almost no linear correlation with `best_price`
+
+### Barplots
+
+For the quantitive variables we decided to plot the barplots. Notably we decided to color the bars based on their `os` feature, since we expect the phones with `os == "other"`
+to have a different distribution than Android and iOs.
+
+```{r}
+cols <- c(5, 8:11)
+
+for (i in cols) {
+  layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+  par(mar=c(0,3.1,1.1,2.1))
+  boxplot(df[, i], horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)[i]) # xaxt
+  par(mar=c(4,3.1,1.1,2.1))
+  hist(df[, i],border = F, main = "", col="purple")
+}
+```
+
+```{r}
+  layout(mat=matrix(c(1,2),2,1,byrow = TRUE), height = c(1,8) )
+  par(mar=c(0,3.1,1.1,2.1))
+  boxplot(df[, "screen_size"], horizontal = TRUE,  xaxt = "n", col= "yellow", frame= F, main=colnames(df)["screen_size"]) # xaxt
+  par(mar=c(4,3.1,1.1,2.1))
+  hist(df[, "screen_size"],border = F, main = "", col="purple")
+```
+
+```{r}
+# Load the ggplot2 package
+library(ggplot2)
+
+# Create a stacked barplot of df$screen_size colored by df$os
+ggplot(df, aes(x = factor(screen_size), fill = os)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(title = "Screen Size by OS", x = "Screen Size", y = "Count")
+```
+
+```{r}
+# Create a histogram of df$screen_size colored by df$os
+hist_screen_size <- ggplot(df, aes(x = screen_size, fill = os)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 12) +
+  labs(title = "Histogram of Screen Size by OS", x = "Screen Size", y = "Count")
+
+# Create a boxplot of df$screen_size colored by df$os
+box_screen_size <- ggplot(df, aes(x = os, y = screen_size, fill = os)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Screen Size by OS", x = "OS", y = "Screen Size")
+
+# Arrange the histogram and boxplot in a grid
+grid.arrange(hist_screen_size, box_screen_size, ncol = 2)
+
+# Create a histogram of df$memory_size colored by df$os
+hist_screen_size <- ggplot(df, aes(x = memory_size, fill = os)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 10) +
+  labs(title = "Histogram of Memory Size by OS", x = "Memory Size", y = "Count")
+
+# Create a boxplot of df$memory_size colored by df$os
+box_screen_size <- ggplot(df, aes(x = os, y = memory_size, fill = os)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Memory Size by OS", x = "OS", y = "Memory Size")
+
+# Arrange the histogram and boxplot in a grid
+grid.arrange(hist_screen_size, box_screen_size, ncol = 2)
+
+# Create a histogram of df$battery_size colored by df$os
+hist_screen_size <- ggplot(df, aes(x = battery_size, fill = os)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 12) +
+  labs(title = "Histogram of Battery Size by OS", x = "Battery Size", y = "Count")
+
+# Create a boxplot of df$battery_size colored by df$os
+box_screen_size <- ggplot(df, aes(x = os, y = battery_size, fill = os)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Battery size by OS", x = "OS", y = "Battery Size")
+
+# Arrange the histogram and boxplot in a grid
+grid.arrange(hist_screen_size, box_screen_size, ncol = 2)
+
+```

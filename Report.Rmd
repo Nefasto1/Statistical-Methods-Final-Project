@@ -1,0 +1,206 @@
+---
+title: "Final_Project"
+author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, include = FALSE}
+#install.packages("mgcv")
+#install.packages("dplyr")
+#install.packages("rpart")
+#install.packages("rpart.plot")
+#install.packages("ipred")
+#install.packages("caret")
+#install.packages("stringr")
+#install.packages("ggcorrplot")
+```
+
+```{r, include = FALSE}
+library(stringr)
+library(mgcv)        # GAMs
+library(rsample)     # data splitting
+library(dplyr)       # data wrangling
+library(rpart)       # performing regression trees
+library(rpart.plot)  # plotting regression trees
+library(ipred)       # bagging
+library(caret)
+library(ggcorrplot)
+library(ICglm)
+library(randomForest)
+library(earth)
+```
+
+
+# Introduction
+
+The aim of this project is to predict the price of a smartphone based on its features. The dataset used for this analysis is the [mobile phones dataset](https://www.kaggle.com/datasets/artempozdniakov/ukrainian-market-mobile-phones-data), which contains 13 columns and 1224 rows:
+
+| Variables | Description                                   | Type          |
+| -------------  | -------------------------------------------   | ------------- |
+| X              | Index of the phone                            |     int       |
+| Brand_Name     | Name of the phone brand                       |     chr       |
+| Model_Name     | Name of the phone model                       |     chr       |
+|    Os          |    Operating system                           |     chr       |
+| Popularity     | The popularity of the phone in range 1-1224   |     int       |
+| Best_Price     | Best price of the price-range in (UAH)        |     num       |
+| Lowest_Price   | Highest price of the price-range in (UAH)     |     num       |
+| Highest_Price  | Lowest price of the price-range in (UAH)      |     num       |
+| Sellers_Amount |   The amount sellers sold the phone           |     num       |
+| Screen_Size    |  The size of phone's screen (inches).         |     num       |
+| Memory_Size    |  The size of the phone's memory (GB)          |     num       |
+| Battery_Size   |  The size of the phone's battery (mAh)        |     num       |
+| Release_Date   |  The launch date of the product on the market |     chr       |
+
+
+```{r Intoduction}
+df <- read.csv("phones_data.csv", header=T)
+head(df)
+```
+
+Specifically, our objective is to predict the `best_price` variable. Our approach consists of the following steps:
+
+
+
+# Data exploration
+
+## Data preprocessing
+
+Firstly we remove from the dataset the index column `X`
+```{r}
+df$X <- NULL
+```
+
+Our next step is to briefly explore the `chr` variables and transform the appropriate ones into factors.
+ - `model_name` has not been transformed into a factor because it has too many levels, almost a unique model_name for each row;
+ - `brand_name` has not been transformed into a factor obtaining 64 classes;
+ - `os`  has not been transformed into a factor obtaining 3 classes;
+ - `release_date`  has not been transformed into a factor because it has been used to create two new variables: `month` and `year`. 
+ 
+```{r}
+length(unique(df$model_name))
+```
+
+```{r}
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+```
+
+```{r}
+df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
+df$year <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][2]}))-2000
+```
+
+For clarity's sake we convert the ukrainian currency (UAH) into euros (€) and rename the blank "" `os` class as "other".
+
+```{r}
+df$best_price <- df$best_price*0.024
+df$lowest_price <- df$lowest_price*0.024
+df$highest_price <- df$highest_price*0.024
+
+levels(df$os)[1] <- "other"
+```
+
+
+```{r}
+summary(df)
+```
+
+From the summary we notice the presence of some NAs in the `battery_size`, `screen_size`, `memory_size`, `lowest_price` and `highest_price` variables. Given the small amount of NAs in the first two we  decide to remove the rows with NAs. Further investigation into the `memory_size` shows that the NAs are present only for the "other" `os` class, so we decide to fill them with the median of the `memory_size` for the "other" `os` class. The choice of the median is dictated by the presence of a few outliers.
+
+```{r battery_size and screen_size NAs}
+df <- df[- which(is.na(df$battery_size)),]
+df <- df[- which(is.na(df$screen_size)),]
+```
+
+```{r memory_size NAs}
+tmp <- df[which(df$os == "other"),]$memory_size
+df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
+```
+
+The variables `lowest_price` and `highest_price` also show some outliers so their NAs have been filled with their median.
+
+```{r lowest_price and highest_price NAs}
+tmp <- which(is.na(df$lowest_price))
+df$lowest_price[tmp] <- median(df$lowest_price[-tmp])
+tmp <- which(is.na(df$highest_price))
+df$highest_price[tmp] <- median(df$highest_price[-tmp])
+
+summary(df)
+```
+
+The dataset contains several duplicates, where phones share the same characteristics but have different popularity levels. Therefore, we eliminate these duplicate observations as they provide redundant information. This process involves retaining only the first occurrence of each duplicate and replacing its popularity with the average popularity of the duplicates. An example is given below.
+
+```{r duplicates motivation}
+df[2:4,]
+```
+```{r duplicates handling}
+# Find the indices of duplicate rows
+idxs <- which(duplicated(df[,-c(2, 4)]))
+
+# Check if each index is succeeded by the next one in the sequence
+succ <- c(idxs[-1] - idxs[-length(idxs)] == 1, FALSE)
+
+i = 1
+while (i <= length(idxs)){
+  start = idxs[i]
+  sum <- c(df$popularity[start])
+  while (succ[i]){
+    i = i + 1
+    sum <- c(sum, df$popularity[idxs[i]])
+  }
+  df$popularity[start] <- mean(sum)
+  i = i + 1
+}
+
+# Remove the duplicate rows
+df <- df[-idxs, ]
+
+# Remove the model_name column
+df$model_name <- NULL
+```
+
+```{r Meizu outlier, include=FALSE}
+df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),]$os = "Android"
+```
+
+The `popularity` variable is unique for each row, therefore we decided to create a new variable `popularity_levels` which divides the popularity into 4 classes: "low", "medium", "high" and "very high" based on the quartiles of the `popularity` variable.
+
+```{r}
+df$popularity <- as.numeric(df$popularity)
+
+tag <- quantile(df$popularity)
+
+df$popularity_levels <- cut(df$popularity, breaks = tag,
+labels=c("low", "medium", "high", "very high"), include.lowest=TRUE)
+
+df$popularity <- NULL
+```
+
+## Data visualization
+
+```{r}
+corr <- cor(df[, c("battery_size", "memory_size", "screen_size", "best_price", "highest_price", "lowest_price", "sellers_amount")], use="complete.obs" )
+
+ggcorrplot(corr, hc.order = TRUE, lab = TRUE, colors=c("yellow", "white", "purple"))
+```
+
+From the correlation plot, we observe a strong positive linear correlation between best_price, highest and lowest price. For this reason we don't consider them in our analysis.
+
+```{r}
+df$highest_price <- NULL
+df$lowest_price <- NULL
+```
+
+```{r}
+cols <- c("battery_size", "memory_size", "screen_size", "best_price", "sellers_amount")
+
+for (i in cols) {
+  p1 <- ggplot(df, aes_string(x=i)) + geom_boxplot(fill="yellow", width= 15, position = position_nudge(y=300))+ 
+  geom_histogram(fill="purple", color = "black") + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size=16, face="bold.italic"))
+  plot(p1)
+}
+```
+

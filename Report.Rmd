@@ -1,0 +1,395 @@
+---
+title: "Final_Project"
+author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, include = FALSE}
+#install.packages("mgcv")
+#install.packages("dplyr")
+#install.packages("rpart")
+#install.packages("rpart.plot")
+#install.packages("ipred")
+#install.packages("caret")
+#install.packages("stringr")
+#install.packages("ggcorrplot")
+#library(ggpubr)
+```
+
+```{r, include = FALSE}
+library(stringr)
+library(mgcv)        # GAMs
+library(rsample)     # data splitting
+library(dplyr)       # data wrangling
+library(rpart)       # performing regression trees
+library(rpart.plot)  # plotting regression trees
+library(ipred)       # bagging
+library(caret)
+library(ggcorrplot)
+library(ICglm)
+library(randomForest)
+library(earth)
+library(gridExtra)
+library(ggpubr)
+library(patchwork)
+```
+
+
+# Introduction
+
+The aim of this project is to predict the price of a smartphone based on its features. The dataset used for this analysis is the [mobile phones dataset](https://www.kaggle.com/datasets/artempozdniakov/ukrainian-market-mobile-phones-data), which contains 13 columns and 1224 rows:
+
+| Variables | Description                                   | Type          |
+| -------------  | -------------------------------------------   | ------------- |
+| X              | Index of the phone                            |     int       |
+| Brand_Name     | Name of the phone brand                       |     chr       |
+| Model_Name     | Name of the phone model                       |     chr       |
+|    Os          |    Operating system                           |     chr       |
+| Popularity     | The popularity of the phone in range 1-1224   |     int       |
+| Best_Price     | Best price of the price-range in (UAH)        |     num       |
+| Lowest_Price   | Highest price of the price-range in (UAH)     |     num       |
+| Highest_Price  | Lowest price of the price-range in (UAH)      |     num       |
+| Sellers_Amount |   The amount sellers sold the phone           |     num       |
+| Screen_Size    |  The size of phone's screen (inches).         |     num       |
+| Memory_Size    |  The size of the phone's memory (GB)          |     num       |
+| Battery_Size   |  The size of the phone's battery (mAh)        |     num       |
+| Release_Date   |  The launch date of the product on the market |     chr       |
+
+
+```{r Intoduction}
+df <- read.csv("phones_data.csv", header=T)
+head(df)
+```
+
+Specifically, our objective is to predict the `best_price` variable. Our approach consists of the following steps:
+
+# Data exploration
+
+## Data preprocessing
+
+Firstly we remove from the dataset the index column `X`
+```{r}
+df$X <- NULL
+```
+
+Our next step is to briefly explore the `chr` variables and transform the appropriate ones into factors.
+
+ - `model_name` won't be transformed into a factor because it has too many levels, almost a unique model_name for each row;
+ 
+ - `brand_name` will be transformed into a factor;
+ 
+ - `os`  will be transformed into a factor;
+ 
+ - `release_date`  won't be transformed into a factor because it will be used to create two new variables: `month` and `year`. 
+ 
+```{r}
+length(unique(df$model_name))
+```
+
+```{r}
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+```
+
+```{r}
+df$month <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][1]}))
+df$year <- as.numeric(sapply(df$release_date, FUN = function(x) {strsplit(x, split = '[-]')[[1]][2]}))-2000
+```
+
+For clarity's sake we convert the ukrainian currency (UAH) into euros (€) and rename the blank "" `os` class as "other".
+
+```{r}
+df$best_price <- df$best_price*0.024
+df$lowest_price <- df$lowest_price*0.024
+df$highest_price <- df$highest_price*0.024
+
+levels(df$os)[1] <- "other"
+```
+
+We decide to investigate the `os` variable
+
+```{r}
+table(df$os)
+```
+Given the insufficient amount of data for the `EMUI`, `KAIOS`, `OxygenOS` and `WindowsPhone` factor levels, we decide to aggregate them into the `other` and `Android` levels based on their characteristics.
+```{r}
+levels(df$os) <- c("other", "Android", "Android", "iOS", "other", "Android", "Android")
+```
+
+```{r}
+summary(df)
+```
+
+From the summary we notice the presence of some NAs in the `battery_size`, `screen_size`, `memory_size`, `lowest_price` and `highest_price` variables. Given the small amount of NAs in the first two we  decide to remove the rows with NAs. Further investigation into the `memory_size` shows that the NAs are present only for the "other" `os` class, so we decide to fill them with the median of the `memory_size` for the "other" `os` class. The choice of the median is dictated by the presence of a few outliers.
+
+```{r battery_size and screen_size NAs}
+df <- df[- which(is.na(df$battery_size)),]
+df <- df[- which(is.na(df$screen_size)),]
+```
+
+```{r memory_size NAs}
+tmp <- df[which(df$os == "other"),]$memory_size
+df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
+```
+
+The variables `lowest_price` and `highest_price` also show some outliers so their NAs have been filled with their median.
+
+```{r lowest_price and highest_price NAs}
+tmp <- which(is.na(df$lowest_price))
+df$lowest_price[tmp] <- median(df$lowest_price[-tmp])
+tmp <- which(is.na(df$highest_price))
+df$highest_price[tmp] <- median(df$highest_price[-tmp])
+
+summary(df)
+```
+
+The dataset contains several duplicates, where phones share the same characteristics but have different popularity levels. Therefore, we eliminate these duplicate observations as they provide redundant information. This process involves retaining only the first occurrence of each duplicate and replacing its popularity with the average popularity of the duplicates. An example is given below.
+
+```{r duplicates motivation}
+df[2:4,]
+```
+```{r duplicates handling}
+# Find the indices of duplicate rows
+idxs <- which(duplicated(df[,-c(2, 4)]))
+
+# Check if each index is succeeded by the next one in the sequence
+succ <- c(idxs[-1] - idxs[-length(idxs)] == 1, FALSE)
+
+i = 1
+while (i <= length(idxs)){
+  start = idxs[i]
+  sum <- c(df$popularity[start])
+  while (succ[i]){
+    i = i + 1
+    sum <- c(sum, df$popularity[idxs[i]])
+  }
+  df$popularity[start] <- mean(sum)
+  i = i + 1
+}
+
+# Remove the duplicate rows
+df <- df[-idxs, ]
+
+# Remove the model_name column
+df$model_name <- NULL
+```
+
+```{r Meizu outlier, include=FALSE}
+df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),]$os = "Android"
+```
+
+The `popularity` variable is unique for each row, therefore we decided to create a new variable `popularity_levels` which divides the popularity into 4 classes: "low", "medium", "high" and "very high" based on the quartiles of the `popularity` variable.
+
+```{r}
+df$popularity <- as.numeric(df$popularity)
+
+tag <- quantile(df$popularity)
+
+df$popularity_levels <- cut(df$popularity, breaks = tag,
+labels=c("low", "medium", "high", "very high"), include.lowest=TRUE)
+
+df$popularity <- NULL
+```
+
+## Data visualization
+
+```{r}
+corr <- cor(df[, c("battery_size", "memory_size", "screen_size", "best_price", "highest_price", "lowest_price", "sellers_amount")], use="complete.obs" )
+
+ggcorrplot(corr, hc.order = TRUE, lab = TRUE, colors=c("yellow", "white", "purple"))
+```
+
+From the correlation plot, we observe a strong positive linear correlation between best_price, highest and lowest price. For this reason we don't consider them in our analysis.
+
+```{r}
+df$highest_price <- NULL
+df$lowest_price <- NULL
+```
+
+```{r, message=FALSE, warning=FALSE}
+cols <- c("battery_size", "memory_size", "screen_size", "sellers_amount")
+
+plots = list()
+
+for (i in cols) {
+  p1 <- ggplot(df, aes_string(x=i)) + geom_boxplot(fill="yellow", width= 15, position = position_nudge(y=300))+ 
+    geom_histogram(fill="purple", color = "black") + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+    plots <- c(plots, list(p1))}
+
+grid.arrange(grobs=plots, ncol=2, nrow=2)
+```
+The `battery_size`, `memory_size` and `sellers_amount` covariates plots all show the presence of right-skewed distributions. For those we decided to apply a logarithmic transformation, notably for `memory_size` we choose a logarithm of base 2. The `screen_size` covariate too displays a certain degree of right-skewness, but also a clear bi-modal distribution. For 
+this reason we decided to leave it as it is.
+
+```{r}
+
+gam_df <- df
+
+df$battery_size <- log(df$battery_size)
+df$memory_size <- log2(df$memory_size)
+df$sellers_amount <- log(df$sellers_amount)
+```
+
+```{r, message=FALSE, warning=FALSE}
+cols <- c("battery_size", "memory_size", "screen_size", "sellers_amount")
+
+plots = list()
+
+for (i in cols) {
+  p1 <- ggplot(df, aes_string(x=i)) + geom_boxplot(fill="yellow", width= 15, position = position_nudge(y=550))+ 
+    geom_histogram(fill="purple", color = "black", bins = 12) + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic"))
+    plots <- c(plots, list(p1))}
+
+grid.arrange(grobs=plots, ncol=2, nrow=2)
+```
+The transformations seem to handle the right-skewness of the covariates. The `battery_size` covariate is now approximately normally distributed. The `memory_size` covariate now exhibits a bimodal behavior, but the transformation has reduced the right-skewness. The `sellers_amount` now is approximately uniform. 
+
+We further investigate the bimodal behavior by plotting the three variables we're interested in by factoring the `os` type as well.
+```{r}
+bimodal_vars <- c("battery_size", "memory_size", "screen_size")
+
+plots = list()
+
+for (i in bimodal_vars) {
+  p1 <- ggplot(df, aes_string(x=i, fill = "os")) +
+    geom_histogram(color = "black", bins = 12) + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic"))
+    plots <- c(plots, list(p1))}
+
+
+grid.arrange(grobs=plots, ncol=3, nrow=1, common.legend = TRUE, legend="bottom")
+```
+From these plots we see that there exist a clear difference in these variables distribution that's based on the type of operating system (`os`). `Android` and `iOs` categories refer to smartphones with more modern features, while `other` category refers to old-fashioned mobile phones. 
+
+## Categorical variables exploration
+
+```{r brand_name}
+tmp <- sort(table(df$brand_name))
+
+# Convert the table to a data frame for plotting
+tmp_df <- data.frame(Brand = names(tmp), Count = as.vector(tmp))
+
+# Create a bar plot
+p <- ggplot(tmp_df, aes(x = reorder(Brand, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("Brand") +
+  ylab("Count") +
+  ggtitle("Brand Counts") + geom_hline(yintercept = 60, color = "red", linetype = "dashed") + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+
+# Print the plot
+print(p)
+```
+As there are too many classes with an exiguous amount of observations, we decided to group the brands into 4 categories: `Samsung`, `Xiaomi`, `Apple` and `Remaining`.
+
+```{r}
+cut_line <- 60
+to_remove <- names(tmp[tmp <= cut_line])
+
+vals <- c()
+for (i in 1:length(levels(df$brand_name))){
+  if (any(levels(df$brand_name)[i] == to_remove)){
+    vals <- c(vals, "Remaining")
+  } else {
+    vals <- c(vals, levels(df$brand_name)[i])
+  }
+}
+
+levels(df$brand_name) <- vals
+```
+
+```{r}
+tmp <- sort(table(df$brand_name))
+
+# Convert the table to a data frame for plotting
+tmp_df <- data.frame(Brand = names(tmp), Count = as.vector(tmp))
+
+# Create a bar plot
+p <- ggplot(tmp_df, aes(x = reorder(Brand, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme(axis.text.x = element_text(hjust = 0.5)) +
+  xlab("Brand") +
+  ylab("Count") +
+  ggtitle("Brand Counts") + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+
+# Print the plot
+print(p)
+```
+
+
+```{r}
+plots = list()
+for (i in c("month","year")) {
+  p1 <- ggplot(data = data.frame(x = factor(sort(as.numeric(names(table(df[, i]))))), y = as.numeric(table(df[, i]))),
+         aes(x = x, y = y, fill = x)) +
+    geom_bar(fill= "steelblue",color = "black", stat = "identity") + ggtitle(toupper(i)) + labs(x = i, y = "count") + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+  plots <- c(plots, list(p1))}
+grid.arrange(grobs=plots, ncol=2, nrow=1, common.legend = TRUE, legend="bottom")
+```
+
+In analyzing the `month` plot, we observe a notable increase in the number of phones sold during the months of September (9) and October (10). 
+This surge aligns with the annual release of iPhones, suggesting a pattern linked to this event. 
+
+Additionally, the exponential growth trend evident in the `year` plot likely reflects the increasing demand for smartphones on a yearly basis. 
+The peak observed in 2020 may be attributed to the COVID-19 pandemic, which significantly heightened the need for remote communication, during isolation for each member within most households. 
+The count for 2021 appears lower since our dataset registers data until February.
+
+```{r}
+tmp <- sort(table(df$os))
+
+# Convert the table to a data frame for plotting
+tmp_df <- data.frame(Os = names(tmp), Count = as.vector(tmp))
+
+# Create a bar plot
+p <- ggplot(tmp_df, aes(x = reorder(Os, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme(axis.text.x = element_text(hjust = 0.5)) +
+  xlab("Os") +
+  ylab("Count") +
+  ggtitle("Os counts") + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+
+# Print the plot
+print(p)
+```
+It's evident that the `Android` operating system is the most chosen in the market.
+
+```{r}
+
+cat_variables <- c("os", "month", "year", "popularity_levels")
+
+plots = list()
+
+for (i in cat_variables) {
+  p1 <- ggplot(df, aes_string(x= factor(df[,i]), y = df$best_price)) + geom_boxplot(fill="yellow") + labs(x = i, y = "best_price") + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + ggtitle(toupper(i))
+    plots <- c(plots, list(p1))}
+
+grid.arrange(grobs=plots, ncol=2, nrow=2)
+
+```
+
+From the boxplots we observe that:
+
+  - For the `os` variable the `iOS` operating system shows a significantly higher `best_price` than the others. We also notice that the `Android` level has several outliers;
+  - For the `month` variable, the `best_price` is higher in the months of September and October, which aligns with the release of new iPhones. In the month of February, the `best_price` is also higher than the others because of the release of the flagships Samsung smartphones;
+  - For the `year` variable, the `best_price` exhibits a growing trend over the years;
+  - For the `popularity_levels` variable, the `best_price` grows with the popularity, except for some outliers.
+  
+## Training and testing datasets split 
+
+```{r}
+
+df$epoch <- (df$year - 13) * 12 + df$month
+
+sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
+
+train <- sorted_df[1:round(nrow(sorted_df) * 0.8),]
+test <- sorted_df[round(nrow(sorted_df) * 0.8):nrow(sorted_df),]
+
+sorted_gam_df <- gam_df[sort(gam_df$epoch, index.return=T)$ix,]
+
+train_gam <- sorted_gam_df[1:round(nrow(sorted_gam_df) * 0.8),]
+test_gam <- sorted_gam_df[round(nrow(sorted_gam_df) * 0.8):nrow(sorted_gam_df),]
+
+```

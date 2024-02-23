@@ -16,7 +16,7 @@ output:
 #install.packages("caret")
 #install.packages("stringr")
 #install.packages("ggcorrplot")
-#library(ggpubr)
+#install.packages("cowplot")
 ```
 
 ```{r, include = FALSE}
@@ -33,8 +33,7 @@ library(ICglm)
 library(randomForest)
 library(earth)
 library(gridExtra)
-library(ggpubr)
-library(patchwork)
+library(cowplot)
 ```
 
 
@@ -245,20 +244,23 @@ grid.arrange(grobs=plots, ncol=3, nrow=1)
 The transformations seem to handle the right-skewness of the covariates. The `log_battery_size` covariate is now approximately normally distributed. The `log_memory_size` covariate exhibits a bimodal behavior, but the transformation has reduced the right-skewness. The `log_sellers_amount` is now approximately uniform. 
 
 We further investigate the bimodal behavior by plotting the three variables we're interested in by factoring the `os` type as well.
+
 ```{r}
-bimodal_vars <- c("log_battery_size", "log_memory_size", "screen_size")
+df_long <- reshape2::melt(df, id.vars = "os", measure.vars = bimodal_vars)
 
-plots = list()
+colors <- c("other" = "deepskyblue4", "Android" = "darkorange", "iOS" = "skyblue") 
 
-for (i in bimodal_vars) {
-  p1 <- ggplot(df, aes_string(x=i, fill = "os")) +
-    geom_histogram(color = "black", bins = 12) + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + scale_fill_manual(values = c("yellow", "purple","purple"))
-    plots <- c(plots, list(p1))
-    }
+# Create the histograms
+p <- ggplot(df_long, aes(x = value, fill = os)) +
+  geom_histogram(color = "black", position = "identity", bins = 12) +
+  scale_fill_manual(values = colors) +
+  facet_wrap(~variable, scales = "free") +
+  theme(legend.position = "bottom", strip.text = element_text(size = 12, face = "bold.italic"))
 
-
-grid.arrange(grobs=plots, ncol=3, nrow=1, common.legend = TRUE, legend="bottom")
+# Print the plot
+print(p)
 ```
+
 From these plots we see that there exist a clear difference in these variables distribution that's based on the type of operating system (`os`). `Android` and `iOs` categories refer to smartphones with more modern features, while `other` category refers to old-fashioned mobile phones. 
 
 ## Categorical variables exploration
@@ -360,8 +362,9 @@ cat_variables <- c("os", "month", "year", "popularity_levels")
 plots = list()
 
 
+
 for (i in cat_variables) {
-  p1 <- ggplot(df, aes_string(x= factor(df[,i]), y = df$best_price)) + geom_boxplot(fill="steelblue") + labs(x = i, y = "best_price") + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + ggtitle(toupper(i))
+  p1 <- ggplot(df, aes_string(x= factor(df[,i]), y = df$best_price)) + geom_boxplot(fill="indianred1") + labs(x = i, y = "best_price") + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + ggtitle(toupper(i))
     plots <- c(plots, list(p1))}
 
 grid.arrange(grobs=plots, ncol=2, nrow=2)

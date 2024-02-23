@@ -225,16 +225,13 @@ The `battery_size`, `memory_size` and `sellers_amount` covariates plots all show
 this reason we decided to leave it as it is.
 
 ```{r}
-
-gam_df <- df
-
-df$battery_size <- log(df$battery_size)
-df$memory_size <- log2(df$memory_size)
-df$sellers_amount <- log(df$sellers_amount)
+df$log_battery_size <- log(df$battery_size)
+df$log_memory_size <- log2(df$memory_size)
+df$log_sellers_amount <- log(df$sellers_amount)
 ```
 
 ```{r, message=FALSE, warning=FALSE}
-cols <- c("battery_size", "memory_size", "screen_size", "sellers_amount")
+cols <- c("log_battery_size", "log_memory_size", "log_sellers_amount")
 
 plots = list()
 
@@ -243,20 +240,21 @@ for (i in cols) {
     geom_histogram(fill="purple", color = "black", bins = 12) + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic"))
     plots <- c(plots, list(p1))}
 
-grid.arrange(grobs=plots, ncol=2, nrow=2)
+grid.arrange(grobs=plots, ncol=3, nrow=1)
 ```
-The transformations seem to handle the right-skewness of the covariates. The `battery_size` covariate is now approximately normally distributed. The `memory_size` covariate now exhibits a bimodal behavior, but the transformation has reduced the right-skewness. The `sellers_amount` now is approximately uniform. 
+The transformations seem to handle the right-skewness of the covariates. The `log_battery_size` covariate is now approximately normally distributed. The `log_memory_size` covariate exhibits a bimodal behavior, but the transformation has reduced the right-skewness. The `log_sellers_amount` is now approximately uniform. 
 
 We further investigate the bimodal behavior by plotting the three variables we're interested in by factoring the `os` type as well.
 ```{r}
-bimodal_vars <- c("battery_size", "memory_size", "screen_size")
+bimodal_vars <- c("log_battery_size", "log_memory_size", "screen_size")
 
 plots = list()
 
 for (i in bimodal_vars) {
   p1 <- ggplot(df, aes_string(x=i, fill = "os")) +
-    geom_histogram(color = "black", bins = 12) + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic"))
-    plots <- c(plots, list(p1))}
+    geom_histogram(color = "black", bins = 12) + ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + scale_fill_manual(values = c("yellow", "purple","purple"))
+    plots <- c(plots, list(p1))
+    }
 
 
 grid.arrange(grobs=plots, ncol=3, nrow=1, common.legend = TRUE, legend="bottom")
@@ -361,8 +359,9 @@ cat_variables <- c("os", "month", "year", "popularity_levels")
 
 plots = list()
 
+
 for (i in cat_variables) {
-  p1 <- ggplot(df, aes_string(x= factor(df[,i]), y = df$best_price)) + geom_boxplot(fill="yellow") + labs(x = i, y = "best_price") + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + ggtitle(toupper(i))
+  p1 <- ggplot(df, aes_string(x= factor(df[,i]), y = df$best_price)) + geom_boxplot(fill="steelblue") + labs(x = i, y = "best_price") + theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + ggtitle(toupper(i))
     plots <- c(plots, list(p1))}
 
 grid.arrange(grobs=plots, ncol=2, nrow=2)
@@ -379,7 +378,6 @@ From the boxplots we observe that:
 ## Training and testing datasets split 
 
 ```{r}
-
 df$epoch <- (df$year - 13) * 12 + df$month
 
 sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
@@ -387,11 +385,7 @@ sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
 train <- sorted_df[1:round(nrow(sorted_df) * 0.8),]
 test <- sorted_df[round(nrow(sorted_df) * 0.8):nrow(sorted_df),]
 
-gam_df$epoch <- (gam_df$year - 13) * 12 + gam_df$month
-
-sorted_gam_df <- gam_df[sort(gam_df$epoch, index.return=T)$ix,]
-
-train_gam <- sorted_gam_df[1:round(nrow(sorted_gam_df) * 0.8),]
-test_gam <- sorted_gam_df[round(nrow(sorted_gam_df) * 0.8):nrow(sorted_gam_df),]
-
+head(train)
 ```
+
+

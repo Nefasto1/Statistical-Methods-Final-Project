@@ -387,6 +387,8 @@ sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
 train <- sorted_df[1:round(nrow(sorted_df) * 0.8),]
 test <- sorted_df[round(nrow(sorted_df) * 0.8):nrow(sorted_df),]
 
+gam_df$epoch <- (gam_df$year - 13) * 12 + gam_df$month
+
 sorted_gam_df <- gam_df[sort(gam_df$epoch, index.return=T)$ix,]
 
 train_gam <- sorted_gam_df[1:round(nrow(sorted_gam_df) * 0.8),]

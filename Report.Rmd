@@ -132,6 +132,8 @@ df <- df[- which(is.na(df$screen_size)),]
 ```{r memory_size NAs}
 tmp <- df[which(df$os == "other"),]$memory_size
 df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
+
+
 ```
 
 The variables `lowest_price` and `highest_price` also show some outliers so their NAs have been filled with their median.
@@ -198,7 +200,7 @@ df$popularity <- NULL
 ```{r}
 corr <- cor(df[, c("battery_size", "memory_size", "screen_size", "best_price", "highest_price", "lowest_price", "sellers_amount")], use="complete.obs" )
 
-ggcorrplot(corr, hc.order = TRUE, lab = TRUE, colors=c("yellow", "white", "purple"))
+ggcorrplot(corr, hc.order = TRUE, lab = TRUE, colors = c("#AFDDD5", "#EFDEC0", "#FF284B"))
 ```
 
 From the correlation plot, we observe a strong positive linear correlation between best_price, highest and lowest price. For this reason we don't consider them in our analysis.
@@ -225,8 +227,9 @@ this reason we decided to leave it as it is.
 
 ```{r}
 df$log_battery_size <- log(df$battery_size)
-df$log_memory_size <- log2(df$memory_size)
+df$log_memory_size <- floor(log2(df$memory_size*1e4))
 df$log_sellers_amount <- log(df$sellers_amount)
+
 ```
 
 ```{r, message=FALSE, warning=FALSE}
@@ -246,6 +249,7 @@ The transformations seem to handle the right-skewness of the covariates. The `lo
 We further investigate the bimodal behavior by plotting the three variables we're interested in by factoring the `os` type as well.
 
 ```{r}
+bimodal_vars <- c("log_battery_size", "log_memory_size", "screen_size")
 df_long <- reshape2::melt(df, id.vars = "os", measure.vars = bimodal_vars)
 
 colors <- c("other" = "deepskyblue4", "Android" = "darkorange", "iOS" = "skyblue") 
@@ -285,6 +289,7 @@ print(p)
 As there are too many classes with an exiguous amount of observations, we decided to group the brands into 4 categories: `Samsung`, `Xiaomi`, `Apple` and `Remaining`.
 
 ```{r}
+tmp <- sort(table(df$brand_name))
 cut_line <- 60
 to_remove <- names(tmp[tmp <= cut_line])
 
@@ -298,6 +303,8 @@ for (i in 1:length(levels(df$brand_name))){
 }
 
 levels(df$brand_name) <- vals
+
+table(vals)
 ```
 
 ```{r}
@@ -387,8 +394,14 @@ sorted_df <- df[sort(df$epoch, index.return=T)$ix,]
 
 train <- sorted_df[1:round(nrow(sorted_df) * 0.8),]
 test <- sorted_df[round(nrow(sorted_df) * 0.8):nrow(sorted_df),]
-
-head(train)
 ```
 
+We decide to split the dataset into a training set, which will be used to train the model, and a testing set, which will be used to evaluate the model's performance. The split is done in a chronological order, with 80% of the data being used for training (`01/2013 - 09/2020`) and the remaining 20% for testing (`09/2020 - 02/2021`). This is done with the idea of ensuring that the model is trained on data that precedes the testing data, which is more realistic and might help the model to generalize better. Our empirical trials have shown a slight improvement over the random split.
+
+# Linear model
+
+
+```{r}
+
+```
 

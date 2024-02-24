@@ -1,0 +1,168 @@
+
+## Linear model
+
+### Start Model
+
+```{r warning=FALSE}
+
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + sellers_amount + screen_size + memory_size + battery_size + epoch + popularity_levels, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result1
+```
+### Removed epoch, popularity_levels and sellers_amount
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + screen_size + memory_size+  epoch, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result2
+```
+
+### Added interactions
+
+```{r}
+start <- Sys.time()
+
+lm_model <- lm(best_price ~ brand_name + os + epoch + os:memory_size + os:battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result3
+```
+
+```{r}
+plot(lm_model)
+```
+
+
+### Meglio questo rispetto al successivo
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + screen_size + memory_size + epoch + os:memory_size + os:screen_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result4
+```
+
+### Added interations with sellers_amount and popularity_levels
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + os:memory_size + os:screen_size + sellers_amount:popularity_levels, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result5 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result5
+```
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + I(screen_size^3) + poly(memory_size, 3) + poly(battery_size, 2), data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result6 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result6
+```
+```{r}
+plot(lm_model)
+```
+
+
+```{r}
+results_lm <- rbind(result1, result2, result3, result4, result5, result6)
+rownames(results_lm) <- c("Start Model", "Removed epoch, popularity_levels and sellers_amount", "Added interactions", "Removed battery_size and phone_type:battery_size", "Added interations with sellers_amount and popularity_levels", "Polynomial")
+results_lm
+```
+
+#LINEAR MODELS WITH LOG(BEST PRICE)
+
+```{r}
+df$best_price <- log(df$best_price)
+
+```
+
+```{r}
+start <- Sys.time()
+
+lm_model <- lm(best_price ~ brand_name + os + epoch + os:memory_size + os:battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result_log3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result3
+```
+
+
+```{r}
+start <- Sys.time()
+lm_model <- lm(best_price ~ brand_name + os + I(screen_size^3) + poly(memory_size, 3) + poly(battery_size, 2), data = train)
+
+end <- Sys.time()
+
+summary(lm_model)
+
+y_hat <- predict(lm_model, newdata = train)
+pred <- predict(lm_model, newdata = test)
+
+result_log6 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price), "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price), "AIC"=AIC(lm_model), "BIC" = BIC(lm_model), "GCV"=GCV(lm_model), "Time"=end-start)
+result6
+```
+
+
+```{r}
+results_lm_log <- rbind(result_log3, result_log6)
+rownames(results_lm_log) <- c("Added interactions with best_price log", "Polynomial best_price log")
+results_lm_log
+
+
+```

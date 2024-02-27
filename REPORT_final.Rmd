@@ -1,0 +1,1012 @@
+---
+title: "Final_Project"
+author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, include = FALSE}
+#install.packages("mgcv")
+#install.packages("dplyr")
+#install.packages("rpart")
+#install.packages("rpart.plot")
+#install.packages("ipred")
+#install.packages("caret")
+#install.packages("stringr")
+#install.packages("ggcorrplot")
+#install.packages("cowplot")
+```
+
+```{r, include = FALSE}
+library(stringr)
+library(mgcv)        # GAMs
+library(rsample)     # data splitting
+library(dplyr)       # data wrangling
+library(rpart)       # performing regression trees
+library(rpart.plot)  # plotting regression trees
+library(ipred)       # bagging
+library(caret)
+library(ggcorrplot)
+library(ICglm)
+library(randomForest)
+library(earth)
+library(gridExtra)
+library(cowplot)
+```
+
+
+# Introduction
+
+The aim of this project is to predict the price of a smartphone based on its features. The dataset used for this analysis is the [mobile phones dataset](https://www.kaggle.com/datasets/artempozdniakov/ukrainian-market-mobile-phones-data), which contains 13 columns and 1224 rows:
+
+| Variables | Description                                   | Type          |
+| -------------  | -------------------------------------------   | ------------- |
+| X              | Index of the dataset observation                            |     int       |
+| Brand_Name     | Name of the phone brand                       |     chr       |
+| Model_Name     | Name of the phone model                       |     chr       |
+|    Os          |    Operating system                           |     chr       |
+| Popularity     | The popularity of the phone in range 1-1224   |     int       |
+| Best_Price     | Best price of the price-range (UAH)        |     num       |
+| Lowest_Price   | Highest price of the price-range (UAH)     |     num       |
+| Highest_Price  | Lowest price of the price-range (UAH)      |     num       |
+| Sellers_Amount |   The amount of sellers who sold the phone           |     num       |
+| Screen_Size    |  The size of phone's screen (inches).         |     num       |
+| Memory_Size    |  The size of the phone's memory (GB)          |     num       |
+| Battery_Size   |  The size of the phone's battery (mAh)        |     num       |
+| Release_Date   |  The release date (M/Y) of the product on the market |     chr       |
+
+
+```{r Intoduction}
+df <- read.csv("phones_data.csv", header=T)
+head(df)
+```
+
+Specifically, our objective is to predict the `best_price` variable. Our approach consists of the following steps:
+  
+  - Data exploration, where we inspect the dataset;
+  - Data preprocessing, where we clean the dataset and transform the variables;
+  - Data visualization, where we plot the relationships between the variables;
+  - Data splitting into training and test set and choice of performance metrics;
+  - Model building, where we fit different models to the training set and evaluate their performance. The models can be divided into two categories:
+    - Linear models (both `lm` and `glm`);
+    - Non-linear models (`gam`, `trees`, `ensemble`);
+  - Model comparison, where we compare the best models.
+
+# Data exploration
+
+## Data preprocessing
+
+Firstly we remove from the dataset the index column `X`
+```{r}
+df$X <- NULL
+```
+
+Our next step is to briefly explore the `chr` variables and transform the appropriate ones into factors.
+
+ - `model_name` won't be transformed into a factor because it has too many levels: there is almost a unique model_name for each row;
+ 
+ - `brand_name` will be transformed into a factor;
+ 
+ - `os`  will be transformed into a factor;
+ 
+ - `release_date`  won't be transformed into a factor because it will be used to create two new variables: `month` and `year`. 
+ 
+```{r}
+length(unique(df$model_name))
+```
+
+```{r}
+df$brand_name <- factor(df$brand_name)
+df$os <- factor(df$os)
+```
+
+```{r}
+df$month <- as.numeric(sapply(df$release_date, FUN = function(x)
+                      {strsplit(x, split = '[-]')[[1]][1]}))
+df$year <- as.numeric(sapply(df$release_date, FUN = function(x)
+                      {strsplit(x, split = '[-]')[[1]][2]}))-2000
+```
+
+For clarity's sake we convert the ukrainian currency (UAH) into euros (€) (27/02/2024 rate) and rename the blank "" `os` class as "other".
+
+```{r}
+df$best_price <- df$best_price*0.024
+df$lowest_price <- df$lowest_price*0.024
+df$highest_price <- df$highest_price*0.024
+
+levels(df$os)[1] <- "other"
+```
+
+Our next step is to investigate the `os` variable
+
+```{r}
+table(df$os)
+```
+Given the insufficient amount of data for the `EMUI`, `KAIOS`, `OxygenOS` and `WindowsPhone` factor levels, we decide to aggregate them into the `other` and `Android` levels based on their characteristics.
+```{r}
+levels(df$os) <- c("other", "Android", "Android", "iOS", "other", "Android", "Android")
+```
+
+```{r}
+summary(df)
+```
+
+From the summary we notice the presence of some NAs in the `battery_size`, `screen_size`, `memory_size`, `lowest_price` and `highest_price` variables. Given the small amount of NAs in the first two variables, we  decide to remove the rows with NAs. Further investigation into the `memory_size` shows that the NAs are present only for the "other" `os` class, so we decide to fill them with the median of the `memory_size` computed on the "other" `os` class. The choice of the median is dictated by the presence of a few outliers that would therefore too influential on a mean.
+
+```{r battery_size and screen_size NAs}
+df <- df[- which(is.na(df$battery_size)),]
+df <- df[- which(is.na(df$screen_size)),]
+```
+
+```{r memory_size NAs}
+tmp <- df[which(df$os == "other"),]$memory_size
+df$memory_size[which(is.na(df$memory_size))] <- median(tmp[-which(is.na(tmp))])
+
+
+```
+
+The variables `lowest_price` and `highest_price` also show the presence of the outliers so their NAs have been substitued with their median.
+
+```{r lowest_price and highest_price NAs}
+tmp <- which(is.na(df$lowest_price))
+df$lowest_price[tmp] <- median(df$lowest_price[-tmp])
+tmp <- which(is.na(df$highest_price))
+df$highest_price[tmp] <- median(df$highest_price[-tmp])
+
+summary(df)
+```
+
+The dataset contains several duplicates rows, where phones share the same characteristics but have different popularity levels. We decide to eliminate these duplicate observations as they provide redundant information. This process involves retaining only the first occurrence of each duplicate and replacing its popularity with the average popularity of the duplicates. An example of duplicates is given below:
+
+```{r duplicates motivation}
+df[2:4,]
+```
+```{r duplicates handling}
+# Find the indices of duplicate rows
+idxs <- which(duplicated(df[,-c(2, 4)]))
+
+# Check if each index is succeeded by the next one in the sequence
+succ <- c(idxs[-1] - idxs[-length(idxs)] == 1, FALSE)
+
+i = 1
+while (i <= length(idxs)){
+  start = idxs[i]
+  sum <- c(df$popularity[start])
+  while (succ[i]){
+    i = i + 1
+    sum <- c(sum, df$popularity[idxs[i]])
+  }
+  df$popularity[start] <- mean(sum)
+  i = i + 1
+}
+
+# Remove the duplicate rows
+df <- df[-idxs, ]
+
+# Remove the model_name column
+df$model_name <- NULL
+```
+
+```{r Meizu outlier, include=FALSE}
+df[df$os == "other", ][which.max(df$memory_size[df$os == "other"]),]$os = "Android"
+```
+
+The `popularity` variable is unique for each row, therefore we decided to create a new variable `popularity_levels` which divides the popularity into 4 classes: "low", "medium", "high" and "very high" based on the quartiles of the `popularity` variable.
+
+```{r}
+df$popularity <- as.numeric(df$popularity)
+
+tag <- quantile(df$popularity)
+
+df$popularity_levels <- cut(df$popularity, breaks = tag,
+labels=c("low", "medium", "high", "very high"), include.lowest=TRUE)
+
+df$popularity <- NULL
+```
+
+## Data visualization
+
+```{r}
+corr <- cor(df[, c("battery_size", "memory_size", "screen_size", "best_price", "highest_price", "lowest_price", "sellers_amount")], use="complete.obs" )
+
+ggcorrplot(corr, hc.order = TRUE, lab = TRUE, colors = c("#AFDDD5", "#EFDEC0", "#FF284B"))
+```
+
+From the correlation plot, we observe almost a linear correlation between `best_price` and the variables `highest_price` and `lowest_price`. For this reason we don't consider them in our analysis.
+
+```{r}
+df$highest_price <- NULL
+df$lowest_price <- NULL
+```
+
+```{r, message=FALSE, warning=FALSE}
+cols <- c("battery_size", "memory_size", "screen_size", "sellers_amount")
+
+plots = list()
+
+for (i in cols) {
+  p1 <- ggplot(df, aes_string(x=i)) +
+    geom_boxplot(fill="yellow", width= 15, position = position_nudge(y=300)) + 
+    geom_histogram(fill="purple", color = "black") + 
+    ggtitle(toupper(i)) + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+    
+  plots <- c(plots, list(p1))}
+
+grid.arrange(grobs=plots, ncol=2, nrow=2)
+```
+The `battery_size`, `memory_size` and `sellers_amount` covariates plots all show the presence of right-skewed distributions. For those we decided to apply a logarithmic transformation, notably for `memory_size` we choose a logarithm of base 2. The `screen_size` covariate too displays a certain degree of left-skewness, but also a clear bi-modal distribution. For 
+this reason we decided to leave it as it is.
+
+```{r}
+df$log_battery_size <- log(df$battery_size)
+df$log_memory_size <- floor(log2(df$memory_size*1e4))
+df$log_sellers_amount <- log(df$sellers_amount)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+cols <- c("log_battery_size", "log_memory_size", "log_sellers_amount")
+
+plots = list()
+
+for (i in cols) {
+  p1 <- ggplot(df, aes_string(x=i)) +
+    geom_boxplot(fill="yellow", width= 15, position = position_nudge(y=550)) + 
+    geom_histogram(fill="purple", color = "black", bins = 12) + ggtitle(toupper(i)) + 
+    theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic"))
+  
+  plots <- c(plots, list(p1))}
+
+grid.arrange(grobs=plots, ncol=3, nrow=1)
+```
+The transformations seem to handle the right-skewness of the covariates. The `log_battery_size` covariate is now approximately normally distributed. The `log_memory_size` covariate exhibits a bimodal behavior, but the transformation has reduced the right-skewness while introducing a degree of left-skewness. The `log_sellers_amount` is now approximately uniform. 
+
+
+We further investigate the bimodal behavior by plotting the three variables we're interested in by factoring the `os` type as well.
+
+```{r}
+bimodal_vars <- c("log_battery_size", "log_memory_size", "screen_size")
+df_long <- reshape2::melt(df, id.vars = "os", measure.vars = bimodal_vars)
+
+colors <- c("other" = "deepskyblue4", "Android" = "darkorange", "iOS" = "skyblue") 
+
+# Create the histograms
+p <- ggplot(df_long, aes(x = value, fill = os)) +
+  geom_histogram(color = "black", position = "identity", bins = 12) +
+  scale_fill_manual(values = colors) +
+  facet_wrap(~variable, scales = "free") +
+  theme(legend.position = "bottom", strip.text = element_text(size = 12, face = "bold.italic"))
+
+# Print the plot
+print(p)
+```
+
+From these plots we see that there exist a clear difference in these variables distribution that's based on the type of operating system (`os`). `Android` and `iOs` categories refer to smartphones with more modern features, while the `other` category refers to old-fashioned mobile phones. 
+
+## Categorical variables exploration
+
+We begin by exploring the `brand_name` variable
+
+```{r brand_name}
+tmp <- sort(table(df$brand_name))
+
+# Convert the table to a data frame for plotting
+tmp_df <- data.frame(Brand = names(tmp), Count = as.vector(tmp))
+
+# Create a bar plot
+p <- ggplot(tmp_df, aes(x = reorder(Brand, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("Brand") +
+  ylab("Count") +
+  ggtitle("Brand Counts") + geom_hline(yintercept = 60, color = "red", linetype = "dashed") +
+  theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+
+# Print the plot
+print(p)
+```
+As there are too many classes with an exiguous amount of observations, we decided to group the brands into 4 categories: `Samsung`, `Xiaomi`, `Apple` and `Remaining`.
+
+```{r}
+tmp <- sort(table(df$brand_name))
+cut_line <- 60
+to_remove <- names(tmp[tmp <= cut_line])
+
+vals <- c()
+for (i in 1:length(levels(df$brand_name))){
+  if (any(levels(df$brand_name)[i] == to_remove)){
+    vals <- c(vals, "Remaining")
+  } else {
+    vals <- c(vals, levels(df$brand_name)[i])
+  }
+}
+
+levels(df$brand_name) <- vals
+
+table(vals)
+```
+
+```{r}
+tmp <- sort(table(df$brand_name))
+
+# Convert the table to a data frame for plotting
+tmp_df <- data.frame(Brand = names(tmp), Count = as.vector(tmp))
+
+# Create a bar plot
+p <- ggplot(tmp_df, aes(x = reorder(Brand, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme(axis.text.x = element_text(hjust = 0.5)) +
+  xlab("Brand") +
+  ylab("Count") +
+  ggtitle("Brand Counts") + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+
+# Print the plot
+print(p)
+```
+
+
+```{r}
+plots = list()
+for (i in c("month","year")) {
+  p1 <- ggplot(data = data.frame(x = factor(sort(as.numeric(names(table(df[, i]))))), y = as.numeric(table(df[, i]))),
+        aes(x = x, y = y, fill = x)) +
+        geom_bar(fill= "steelblue",color = "black", stat = "identity") + 
+        ggtitle(toupper(i)) + labs(x = i, y = "count") +
+        theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+  plots <- c(plots, list(p1))}
+
+
+grid.arrange(grobs=plots, ncol=2, nrow=1, common.legend = TRUE, legend="bottom")
+```
+
+In analyzing the `month` plot, we observe a notable increase in the number of phones sold during the months of September (9) and October (10). 
+This surge aligns with the annual release of iPhones, suggesting a pattern linked to this event. 
+
+Additionally, the exponential growth trend evident in the `year` plot likely reflects the increasing demand for smartphones on a yearly basis. 
+The peak observed in 2020 may be attributed to the COVID-19 pandemic, which significantly heightened the need for remote communication, during isolation for each member within most households. 
+The count for 2021 appears lower since our dataset registers data until February.
+
+```{r}
+tmp <- sort(table(df$os))
+
+# Convert the table to a data frame for plotting
+tmp_df <- data.frame(Os = names(tmp), Count = as.vector(tmp))
+
+# Create a bar plot
+p <- ggplot(tmp_df, aes(x = reorder(Os, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme(axis.text.x = element_text(hjust = 0.5)) +
+  xlab("Os") +
+  ylab("Count") +
+  ggtitle("Os counts") + theme(plot.title = element_text(hjust = 0.5, size=12, face="bold.italic"))
+
+# Print the plot
+print(p)
+```
+It's evident that the `Android` operating system is the most chosen in the market.
+
+```{r}
+
+cat_variables <- c("os", "month", "year", "popularity_levels")
+
+plots = list()
+
+for (i in cat_variables) {
+  p1 <- ggplot(df, aes_string(x= factor(df[,i]), y = df$best_price)) + 
+        geom_boxplot(fill="indianred1") +
+        labs(x = i, y = "best_price") + 
+        theme(plot.title = element_text(hjust = 0.5, size= 12, face="bold.italic")) + 
+        ggtitle(toupper(i))
+  
+  plots <- c(plots, list(p1))}
+
+grid.arrange(grobs=plots, ncol=2, nrow=2)
+
+```
+
+From the boxplots we observe that:
+
+  - For the `os` variable the `iOS` operating system shows a significantly higher `best_price` than the others. We also notice that the `Android` level has several outliers;
+  - For the `month` variable, the `best_price` is higher in the months of September and October, which aligns with the release of new iPhones. In the month of February, the `best_price` is also higher than the others because of the release of the flagships Samsung smartphones;
+  - For the `year` variable, the `best_price` exhibits a growing trend over the years;
+  - For the `popularity_levels` variable, the `best_price` grows with the popularity, except for some outliers.
+
+
+## Training and testing datasets split 
+
+We decide to split the dataset into a training and test set using a 80/20 split. While this split ignores the temporal data of `month` and `year`, empirical results show no practical differences between an arbitrary and a time-based split. A seed was set to ensure the results reproducibility.
+
+```{r}
+set.seed(15)
+
+split <- initial_split(df, prop = 0.8)
+train <- training(split)
+test <- testing(split)
+```
+
+# Linear models
+
+We begin by defining the metrics on which our models will be evaluated:
+
+  - RMSE on the training set;
+  - R2 on the training set;
+  - RMSE on the test set;
+  - R2 on the test set;
+  - AIC;
+  - BIC;
+  - Training time.
+  
+Our analysis begins by fitting a linear model to the data, following a top-down approach to select the most significant variables.
+
+### Model 1
+
+Our first model includes all the variables with the applied transformations.
+
+```{r warning=FALSE}
+
+start <- Sys.time()
+lm_model_1 <- lm(best_price ~ brand_name + os + log_sellers_amount + screen_size + 
+                 log_memory_size + log_battery_size + month + year + popularity_levels,
+                 data = train)
+
+end <- Sys.time()
+
+summary(lm_model_1)
+
+y_hat <- predict(lm_model_1, newdata = train)
+pred <- predict(lm_model_1, newdata = test)
+
+result1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+             "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+             "AIC"=AIC(lm_model_1), "BIC" = BIC(lm_model_1), "Time"=end-start)
+
+result1
+```
+
+The results show that the variables: `month`, `popularity_levels`, `log_sellers_amount` and `log_battery_size` don't affect the model as much. Our next model is the result of dropping each variable once at the time until no variable can be dropped without a significant loss in the model's performance.
+
+### Model 2
+
+```{r}
+start <- Sys.time()
+lm_model_2 <- lm(best_price ~ brand_name + os + screen_size + log_memory_size +
+                 year, data = train)
+
+end <- Sys.time()
+
+summary(lm_model_2)
+
+y_hat <- predict(lm_model_2, newdata = train)
+pred <- predict(lm_model_2, newdata = test)
+
+result2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+             "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+             "AIC"=AIC(lm_model_2), "BIC" = BIC(lm_model_2), "Time"=end-start)
+
+result2
+```
+
+The results show that the model's performance is only slightly worsened by excluding the variables `log_sellers_amount`, `log_battery_size`, `popularity_levels` and `month`.
+
+### Model 3
+
+The third model includes interactions between some variables to check if it's possible to improve the model's performance.
+
+```{r}
+start <- Sys.time()
+
+lm_model_3 <- lm(best_price ~ brand_name + os + screen_size + year + 
+                 os:log_memory_size  + os:screen_size, data = train)
+
+
+end <- Sys.time()
+
+summary(lm_model_3)
+
+y_hat <- predict(lm_model_3, newdata = train)
+pred <- predict(lm_model_3, newdata = test)
+
+result3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+             "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+             "AIC"=AIC(lm_model_3), "BIC" = BIC(lm_model_3),  "Time"=end-start)
+
+result3
+```
+
+The results show that the model's performance is improved by including these interactions. 
+
+### Model 4
+
+The previous modelstill has a non-significant variable, namely `screen_size`. The fourth model will therefore exclude it.
+
+```{r}
+start <- Sys.time()
+
+lm_model_4 <- lm(best_price ~ brand_name + os + year + os:log_memory_size +
+                os:screen_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model_4)
+
+y_hat <- predict(lm_model_4, newdata = train)
+pred <- predict(lm_model_4, newdata = test)
+
+result4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+             "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+             "AIC"=AIC(lm_model_4), "BIC" = BIC(lm_model_4), "Time"=end-start)
+
+result4
+```
+
+The results for this final model are unchanged compared to the previous one. Since it is our best model so far we decide to further analyze it by checking its residuals.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_model_4)
+```
+
+From the residuals of the model we can see that there is heteroschedasticity. This means that the variance of the residuals is not constant. This is a violation of the assumption of homoscedasticity.
+We can also see that the residuals are not normally distributed. Knowing that all the dependent variables are positive, we will try to fix these issues by applying a logarithmic transformation to the response variable.
+
+## Linear models with logarithmic response variable
+
+```{r}
+df$log_best_price <- log(df$best_price)
+train$log_best_price <- log(train$best_price)
+test$log_best_price <- log(test$best_price)
+```
+
+### Model 5
+
+We now test the fourth model only adding a logarithmic transformation on the `best_price` variable.
+
+```{r}
+start <- Sys.time()
+
+lm_model_5 <- lm(log_best_price ~ brand_name + os + month + year +
+                 os:log_memory_size + os:log_battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model_5)
+
+y_hat <- predict(lm_model_5, newdata = train)
+pred <- predict(lm_model_5, newdata = test)
+
+result_log_5 <- c("RMSE"=RMSE(exp(y_hat), train$best_price), "R2"=R2(exp(y_hat), train$best_price),
+                  "RMSE_test"=RMSE(exp(pred), test$best_price), "R2_test"=R2(exp(pred), test$best_price),
+                  "AIC"=AIC(lm_model_5), "BIC" = BIC(lm_model_5),  "Time"=end-start)
+
+result_log_5
+```
+
+
+### Model 6
+
+We modify the previous model by removing the non-significant variable `year`.
+
+```{r}
+start <- Sys.time()
+
+lm_model_6 <- lm(log_best_price ~ brand_name + os + month +
+                 os:log_memory_size + os:log_battery_size, data = train)
+
+end <- Sys.time()
+
+summary(lm_model_6)
+
+y_hat <- predict(lm_model_6, newdata = train)
+pred <- predict(lm_model_6, newdata = test)
+
+result_log_6 <- c("RMSE"=RMSE(exp(y_hat), train$best_price), "R2"=R2(exp(y_hat), train$best_price),
+                  "RMSE_test"=RMSE(exp(pred), test$best_price), "R2_test"=R2(exp(pred), test$best_price),
+                  "AIC"=AIC(lm_model_6), "BIC" = BIC(lm_model_6),  "Time"=end-start)
+
+result_log_6
+```
+
+The results show that the model's performance is not improved by including these interactions, but we decide to further analyze it by checking its residuals to compare it with the previous model.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_model_6)
+```
+
+The logarithmic model exibits less heteroschedasticity, the residuals are more normally distributed and they are also less right-skewed. The R2 and RMSE performance indexes are slightly worse compared to the linear model ones. 
+
+## Results comparison
+
+```{r}
+results_lm <- rbind(result1, result2, result3, result4, result_log_5, result_log_6)
+rownames(results_lm) <- c("Model 1", "Model 2", "Model 3", "Model 4", "Log_Model 5", "Log_Model 6")
+round(results_lm, 3)
+```
+
+The results show that the best model is the Log_Model_6, which has similar R2 and RMSE to the best linear model on both training and test sets, while better satisfying the homoschedasticity and normality assumptions on the residuals.
+
+# Generalized linear models
+
+We next try to fit a generalized linear model to the data. We will use the Gaussian and Gamma family with log and identity link functions. 
+
+We begin with a gaussian family with a logarithmic link function since the response variable is right skewed and positive.
+
+```{r}
+# Gaussian with log link
+start <- Sys.time()
+glm_1 <- glm(best_price ~ os + sellers_amount + screen_size + memory_size + battery_size + 
+            month + year + popularity_levels + brand_name,
+            data = train, family = gaussian(link = "log"))
+end <- Sys.time()
+
+summary(glm_1)
+
+y_hat <- exp(predict(glm_1, newdata = train))
+pred <- exp(predict(glm_1, newdata = test))
+results_glm1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                  "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                  "AIC"=AIC(glm_1), "BIC"= BIC(glm_1), "Time"=end-start)
+
+results_glm1
+```
+We then removed the non-significant variables and tried to fit the model again.
+
+```{r}
+# Gaussian with log link function (removed vars)
+start <- Sys.time()
+glm_2 <- glm(best_price ~sellers_amount + screen_size + memory_size + battery_size + 
+             year + popularity_levels + brand_name,
+             data = train, family = gaussian(link = "log"))
+end <- Sys.time()
+
+summary(glm_2)
+
+y_hat <- exp(predict(glm_2, newdata = train))
+pred <- exp(predict(glm_2, newdata = test))
+
+results_glm2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                  "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                  "AIC"=AIC(glm_2), "BIC"= BIC(glm_2), "Time"=end-start)
+
+results_glm2
+```
+We now try a Gamma family with an identity link function since the variable `best_price` only takes positive values.
+```{r}
+# Gamma with identity link function
+start <- Sys.time()
+glm_3 <- glm(best_price ~ screen_size + memory_size + battery_size + popularity_levels + brand_name,
+             data = train, family = Gamma(link = "identity"))
+end <- Sys.time()
+
+summary(glm_3)
+
+y_hat <- predict(glm_3, newdata = train)
+pred <- predict(glm_3, newdata = test)
+results_glm3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                  "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                  "AIC"=AIC(glm_3), "BIC"= BIC(glm_3), "Time"=end-start)
+
+results_glm3
+```
+In search for better results we also tried a Gamma family with a logarithmic link function.
+```{r}
+# Gamma with log link function
+start <- Sys.time()
+glm_4 <- glm(best_price ~ os +screen_size + log_memory_size +  popularity_levels +
+             brand_name , data = train, family = Gamma(link = "log"))
+end <- Sys.time()
+
+summary(glm_4)
+
+y_hat <- exp(predict(glm_4, newdata = train))
+pred <- exp(predict(glm_4, newdata = test))
+
+results_glm4 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                  "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                  "AIC"=AIC(glm_4), "BIC"= BIC(glm_4), "Time"=end-start)
+
+results_glm4
+```
+
+We compare the results of the four models
+
+```{r}
+glm_results <- rbind(results_glm1, results_glm2, results_glm3, results_glm4)
+rownames(glm_results) <- c("GLM 1", "GLM 2", "GLM 3", "GLM 4")
+
+glm_results
+```
+From the results we observe that the `GLM 4` model performs best overall when considering the performance indexes. Of this model we plot the residuals
+
+```{r}
+par(mfrow=c(2,2))
+plot(glm_2)
+```
+
+The residuals of the model with gaussian family and log link function are not normally distributed and exhibit a strong heteroschedasticity. We also observe two strong leverage points. However the R2 and RMSE performance indexes are slightly better when compared to linear models.
+
+# Non-linear models
+
+We decide to explore if non-linear models can better capture the relationship between the predictors and the response variable. We will therefore use the Generalized Additive Models (GAM) and the Random Forest (RF) algorithms.
+
+## Generalized Additive Models (GAM)
+
+We start by fitting a GAM model with splines on the continuous predictors. We will use the same predictors as in the linear models.
+
+```{r}
+start <- Sys.time()
+fit_gam1 <- gam(best_price ~ os + s(screen_size) + s(memory_size) + s(battery_size)
+                + s(sellers_amount) + s(month)+ year+ popularity_levels +
+                  brand_name, data = train, method = "REML")
+end <- Sys.time()
+
+summary(fit_gam1)
+
+y_hat <- predict(fit_gam1, newdata = train)
+pred <- predict(fit_gam1, newdata = test)
+results1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+              "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+              "AIC"=AIC(fit_gam1), "BIC"= BIC(fit_gam1),  "Time"=end-start)
+
+results1
+```
+
+We can remove the non significant variables from the model, in this case `os`. Regarding the splines we can see that the `month` variable has a linear effect on the model, so we can remove the spline term from it.
+
+```{r}
+start <- Sys.time()
+fit_gam2 <-gam(best_price ~  s(screen_size) + s(memory_size) + s(battery_size) +
+                 s(sellers_amount) + year + brand_name,
+               data = train, method = "REML")
+end <- Sys.time()
+
+summary(fit_gam2)
+
+y_hat <- predict(fit_gam2, newdata = train)
+pred <- predict(fit_gam2, newdata = test)
+
+results2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+              "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+              "AIC"=AIC(fit_gam2), "BIC"= BIC(fit_gam2), "Time"=end-start)
+
+results2
+```
+We plot the smooth terms to better understand the relationship between the predictors and the response variable.
+```{r}
+par(mfrow=c(2,2))
+plot(fit_gam2)
+```
+The smooth terms for `screen_size`,`battery_size`, `memory_size` and `sellers_amount` show a clear non-linear relationship with the `best_price` variable, as confirmed by the edf values in the summary of the model.
+
+
+Taking into consideration the important interactions, previously discovered in the linear models, we decided to include them in the GAM model. 
+```{r}
+start <- Sys.time()
+fit_gam3 <- gam(best_price ~  brand_name+ year+ s(screen_size, by = os)+ s(memory_size) +
+                  s(sellers_amount), data = train, method = "REML")
+end <- Sys.time()
+
+summary(fit_gam3)
+
+y_hat <- predict(fit_gam3, newdata = train)
+pred <- predict(fit_gam3, newdata = test)
+results3 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+              "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+              "AIC"=AIC(fit_gam3), "BIC"= BIC(fit_gam3),  "Time"=end-start)
+
+results3
+```
+```{r}
+par(mfrow=c(1,3))
+plot(fit_gam3)
+```
+From the smooth terms we can see that `screen_size` is different for each `os` level. The only `os` level that
+exhibits a linear behaviour is `other`, we still decide to keep the spline on this interaction in the model since the non-linearity is strong in the other two cases.
+For the `memory_size` and `sellers_amount` we can see that the non-linear effect is present, therefore 
+we decide to keep the smooth terms in the model.
+```{r}
+par(mfrow=c(2,2))
+gam.check(fit_gam3)
+```
+From the residuals plots we can see that the residuals are not normally distributed and still exhibit heteroschedasticity. The R2 and RMSE performance indexes definitely improved when compared to the linear models.
+
+
+```{r}
+gam_results <- rbind(results1, results2, results3)
+rownames(gam_results) <- c("GAM 1", "GAM 2", "GAM 3")
+round(gam_results, 3)
+```
+
+## Trees
+
+We will now fit a decision tree model to the data. We will use the same predictors as in the linear models.
+```{r}
+start <- Sys.time()
+tree_1 <- rpart(best_price ~ os + sellers_amount + screen_size +
+                  memory_size + battery_size + month + year + 
+                  popularity_levels + brand_name , data = train)
+end <- Sys.time()
+
+rpart.plot(tree_1)
+
+y_hat <- predict(tree_1, newdata = train)
+pred <- predict(tree_1, newdata = test)
+
+results_tree1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                   "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                   "AIC"=NA, "BIC"= NA, "Time"=end-start)
+
+results_tree1
+```
+
+The results show little if any improvement when compared to the previous models. From the tree model we confirm the central role of the `memory_size`, `brand_name` and `screen_size` variables for predicting `best_price`. 
+
+## Bagging
+
+We now fit a bagging model to the data. We use all the available predictors. The hyperparameters are chosen based on some empirical trials.
+```{r}
+start <- Sys.time()
+bag <- bagging(best_price ~ os + sellers_amount + screen_size + memory_size +
+    battery_size + month + year + popularity_levels + brand_name,
+  data=train,
+  nbagg=150,
+  coob=TRUE,
+  control=rpart.control(cp=0.001, minsplit = 2, maxdepth = 5)
+)
+end <- Sys.time()
+
+y_hat <- predict(bag, newdata = train)
+pred <- predict(bag, newdata = test)
+
+results_bag <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                 "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                 "AIC"=NA, "BIC"= NA, "Time"=end-start)
+
+results_bag
+```
+The bagging model fits the data almost as well as the best previous model, but takes much more time to run.
+
+## Boosting
+
+We now fit a boosting model to the data. We use all the available predictors. The hyperparameters are chosen based on some empirical trials.
+```{r, warning=FALSE, message=FALSE}
+library(gbm)
+
+start <- Sys.time()
+boost <- gbm(
+  best_price ~ os + sellers_amount + screen_size + memory_size +
+    battery_size + month + year + popularity_levels + brand_name,
+  distribution="gaussian",
+  data=train,
+  bag.fraction = 1,
+  interaction.depth = 4,
+  shrinkage = 0.01,
+  n.trees=1000)
+end <- Sys.time()
+
+y_hat <- predict(boost, newdata = train)
+pred <- predict(boost, newdata = test)
+
+results_boost <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                   "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                   "AIC"=NA, "BIC"= NA, "Time"=end-start)
+
+results_boost
+```
+The boosting model shows the best results so far, with a relatively low RMSE and a high R2 for both the training and the test set. The model takes a more time to run when compared to simpler models, but the results are worth it.
+
+## Random Forest
+
+We now fit two random forest models to the data. In this first fit we apply a classical random forest model with all the available predictors setting the hyperparameters based on some empirical trials.
+```{r}
+start <- Sys.time()
+rf_1 <- randomForest(best_price ~ os + sellers_amount + screen_size +
+                     memory_size + battery_size + month + year + 
+                    popularity_levels + brand_name,
+                    data = train, importance=T, proximitry=T, mtry=5)
+end <- Sys.time()
+
+y_hat <- predict(rf_1, newdata = train)
+pred <- predict(rf_1, newdata = test)
+
+results_rf1 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                 "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                 "AIC"=NA, "BIC"= NA,  "Time"=end-start)
+
+results_rf1
+
+varImpPlot(rf_1, sort=T, n.var=8, main="Variable Importance")
+```
+From the variable importance plots we can see that the `memory_size`, `brand_name` and `screen_size` variables are the most important for predicting `best_price`, a result consistent with our previous findings.
+
+
+In the second random forest model we apply some pre-pruning, again the hyperparameters are chosen based on some empirical trials.
+```{r}
+start <- Sys.time()
+rf_2 <- randomForest(best_price ~ os + sellers_amount + screen_size +
+                    memory_size + battery_size + month + year +
+                    popularity_levels + brand_name,
+                    data = train,
+                    importance=T, proximitry=T, mtry=5, maxnodes=52)
+end <- Sys.time()
+
+y_hat <- predict(rf_2, newdata = train)
+pred <- predict(rf_2, newdata = test)
+
+results_rf2 <- c("RMSE"=RMSE(y_hat, train$best_price), "R2"=R2(y_hat, train$best_price),
+                 "RMSE_test"=RMSE(pred, test$best_price), "R2_test"=R2(pred, test$best_price),
+                 "AIC"=NA, "BIC"= NA,  "Time"=end-start)
+
+results_rf2
+
+varImpPlot(rf_2, sort=T, n.var=8, main="Variable Importance")
+```
+Again the variance importance plots show that the `memory_size`, `brand_name` and `screen_size` variables are the most important for predicting `best_price`.
+
+```{r}
+non_linear_results <- rbind(results1, results2, results3, results_tree1, results_bag, results_boost, results_rf1, results_rf2)
+rownames(non_linear_results) <- c("GAM 1", "GAM 2", "GAM 3", "Tree 1",
+                                  "Bagging", "Boosting", "RF 1", "RF 2")
+colnames(non_linear_results) <- c("RMSE train", "R2 train", "RMSE test",
+                                  "R2 test", "AIC", "BIC", "Time")
+round(non_linear_results, 3)
+```
+From this table the random forest model without pre-pruning seem to show the best results, with the lowest RMSE and the highest R2 for both the training and the test set. However a R2 of 97.1% is an extremely high value and may indicate overfitting. This led us to choosing the boosting model and the third GAM model as the candidate representatives for the best non-linear models.
+
+```{r}
+best_models_results <- rbind(result4, results_glm4, results3, results_boost)
+
+rownames(best_models_results) <- c("Best linear", "Best GLM", "Best GAM", "Boosting")
+colnames(best_models_results) <- c("RMSE train", "R2 train", "RMSE test",
+                                   "R2 test", "AIC", "BIC", "Time")
+
+best_models_results
+```
+We now compare the best results we have obtained so far for each class of model
+```{r include=FALSE}
+colnames(best_models_results) <- c("RMSE test", "R2 test", "RMSE train", "R2 train", "AIC", "BIC", "Time")
+```
+
+```{r}
+# Convert the data frame to a long format
+df_long <- data.frame(Model = rep(rownames(best_models_results), each = 2),
+                      Metric = c("RMSE train", "RMSE test", "RMSE train", "RMSE test",
+                                 "RMSE train", "RMSE test", "RMSE train", "RMSE test"),
+                      Value = c(c(best_models_results[1,"RMSE test"], best_models_results[1,"RMSE train"]), 
+                      c(best_models_results[2,"RMSE test"], best_models_results[2,"RMSE train"]),
+                      c(best_models_results[3,"RMSE test"], best_models_results[3,"RMSE train"]),
+                      c(best_models_results[4,"RMSE test"], best_models_results[4,"RMSE train"])))
+
+df_long$Metric <- factor(df_long$Metric, levels = c("RMSE train", "RMSE test"))
+
+
+# Create the bar plot
+ggplot(df_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", width=0.55) +
+  scale_fill_manual(values = c("RMSE train" = "#e0397b", "RMSE test" = "#ebc854")) +
+  labs(title = "RMSE on test and train sets", x = "Model", y = "RMSE") +
+  ylim(0, 200) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5))
+
+df_long <- data.frame(Model = rep(rownames(best_models_results), each = 2),
+                      Metric = c("R2 train", "R2 test", "R2 train", "R2 test",
+                                 "R2 train", "R2 test", "R2 train", "R2 test"),
+                      Value = c(c(best_models_results[1,"R2 test"], best_models_results[1,"R2 train"]), 
+                      c(best_models_results[2,"R2 test"], best_models_results[2,"R2 train"]),
+                      c(best_models_results[3,"R2 test"], best_models_results[3,"R2 train"]),
+                      c(best_models_results[4,"R2 test"], best_models_results[4,"R2 train"])))
+
+df_long$Metric <- factor(df_long$Metric, levels = c("R2 train", "R2 test"))
+
+# Create the bar plot
+
+ggplot(df_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", width=0.55) +
+  scale_fill_manual(values = c("R2 train" = "#e0397b", "R2 test" = "#ebc854")) +
+  labs(title = "R2 on test and train sets", x = "Model", y = "R2") +
+  ylim(0, 1) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5))
+```
+The plots show that the boosting model has the lowest RMSE and the highest R2 for both the test and the training sets. With this we conclude our report choosing the boosting model as the best model overall for predicting the `best_price` variable.

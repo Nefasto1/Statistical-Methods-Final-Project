@@ -1,6 +1,6 @@
 ---
-title: "Final_Project"
-author: "Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
+title: "Mobile Phones Data Analysis"
+author: "Group D - Nicola Cortinovis, Roberta Lamberti, Marta Lucas, Stefano Tumino"
 date: "`r Sys.Date()`"
 output:
   pdf_document: default
